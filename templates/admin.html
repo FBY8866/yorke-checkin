@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理后台 - 约克超级品牌日打卡系统</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; background: #F5F7FA; padding-bottom: 80px; }
+        .header {
+            background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+            color: white; padding: 20px;
+        }
+        .header h1 { font-size: 20px; }
+        .header p { opacity: 0.85; font-size: 13px; margin-top: 4px; }
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+            padding: 16px;
+        }
+        .stat {
+            background: white; padding: 16px; border-radius: 12px;
+            text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .stat-num { font-size: 28px; font-weight: 700; color: #1E40AF; }
+        .stat-label { font-size: 12px; color: #6B7280; margin-top: 4px; }
+        .actions {
+            padding: 0 16px 16px; display: flex; gap: 12px;
+        }
+        .btn {
+            flex: 1; padding: 12px; border-radius: 8px;
+            text-align: center; font-size: 14px; font-weight: 600; cursor: pointer; border: none;
+        }
+        .btn-primary { background: #1E40AF; color: white; }
+        .btn-secondary { background: white; color: #1E40AF; border: 1.5px solid #1E40AF; }
+        .section-title {
+            padding: 16px 20px 8px; font-size: 15px; font-weight: 600; color: #374151;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        table {
+            width: calc(100% - 32px); margin: 0 16px; border-collapse: collapse;
+            background: white; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        th { background: #E0E7FF; color: #1E40AF; padding: 12px 8px; text-align: left; font-size: 13px; font-weight: 600; }
+        td { padding: 12px 8px; border-bottom: 1px solid #F3F4F6; font-size: 14px; color: #111827; }
+        tr:last-child td { border-bottom: none; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+        .badge-champion { background: #FEF3C7; color: #B45309; }
+        .badge-extra { background: #D1FAE5; color: #047857; }
+        .badge-pass { background: #DBEAFE; color: #1E40AF; }
+        .badge-none { background: #F3F4F6; color: #9CA3AF; }
+        .status-cell { font-size: 12px; }
+        .status-ok { color: #047857; }
+        .status-partial { color: #B45309; }
+        .status-empty { color: #9CA3AF; }
+        .name-link { color: #1E40AF; cursor: pointer; text-decoration: none; }
+        .name-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 管理后台</h1>
+        <p>欢迎，{{ name }} · {{ today }}</p>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat">
+            <div class="stat-num">{{ total_members }}</div>
+            <div class="stat-label">总成员</div>
+        </div>
+        <div class="stat">
+            <div class="stat-num">{{ today_active }}</div>
+            <div class="stat-label">今日活跃</div>
+        </div>
+        <div class="stat">
+            <div class="stat-num">{{ morning_count }}</div>
+            <div class="stat-label">早目标</div>
+        </div>
+        <div class="stat">
+            <div class="stat-num">{{ evening_count }}</div>
+            <div class="stat-label">晚总结</div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <a href="/admin/leaderboard_view" class="btn btn-primary">📤 生成今日榜单</a>
+        <a href="/logout" class="btn btn-secondary">🚪 退出</a>
+    </div>
+
+    <div class="section-title">
+        <span>📋 成员进度</span>
+        <span style="font-size:12px;color:#6B7280;">共 {{ rows|length }} 人</span>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>排名</th>
+                <th>姓名</th>
+                <th>今日</th>
+                <th>累计</th>
+                <th>连续</th>
+                <th>奖档</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+            <tr>
+                <td><strong>{{ loop.index }}</strong></td>
+                <td><a href="/admin/member/{{ r.id }}" class="name-link">{{ r.name }}</a></td>
+                <td class="status-cell {% if r.today >= 6 %}status-ok{% elif r.today > 0 %}status-partial{% else %}status-empty{% endif %}">
+                    {{ r.today }}分
+                    {% if r.has_morning %}🌅{% endif %}{% if r.has_evening %}🌙{% endif %}
+                </td>
+                <td><strong style="color:#1E40AF;">{{ r.total }}</strong></td>
+                <td>{{ r.streak }}天</td>
+                <td>
+                    {% if '冠军' in r.award %}<span class="badge badge-champion">{{ r.award }}</span>
+                    {% elif '超额' in r.award %}<span class="badge badge-extra">{{ r.award }}</span>
+                    {% elif '达标' in r.award %}<span class="badge badge-pass">{{ r.award }}</span>
+                    {% else %}<span class="badge badge-none">{{ r.award }}</span>{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div style="padding:24px;text-align:center;color:#9CA3AF;font-size:12px;">
+        点击姓名可查看该成员详细打卡记录
+    </div>
+</body>
+</html>
