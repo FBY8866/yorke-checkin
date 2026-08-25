@@ -1,0 +1,26 @@
+# 数据 & 上传文件（含真实成员照片/数据库，切勿上云公开仓库）
+data/
+static/uploads/
+
+# 日志
+server.log
+fw_dump.txt
+tunnel.log
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 本地隧道/防火墙二进制与脚本（仅本机用，云端用 Dockerfile 构建）
+cloudflared.exe
+open-port-5000.bat
+start-tunnel.bat
+启动.bat
+
+# 环境变量 / 密钥
+.env
+*.local
+
+# 系统文件
+.DS_Store
+Thumbs.db
