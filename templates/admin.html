@@ -55,6 +55,10 @@
         .status-empty { color: #9CA3AF; }
         .name-link { color: #1E40AF; cursor: pointer; text-decoration: none; }
         .name-link:hover { text-decoration: underline; }
+        .row-btn { padding: 4px 8px; margin-right: 4px; border: 1px solid #1E40AF; background: white; color: #1E40AF; border-radius: 6px; font-size: 12px; cursor: pointer; }
+        .row-btn.danger { border-color: #DC2626; color: #DC2626; }
+        .row-btn:hover { background: #1E40AF; color: white; }
+        .row-btn.danger:hover { background: #DC2626; color: white; }
     </style>
 </head>
 <body>
@@ -84,8 +88,25 @@
 
     <div class="actions">
         <a href="/admin/leaderboard_view" class="btn btn-primary">📤 生成今日榜单</a>
+        <button class="btn btn-secondary" onclick="document.getElementById('addPanel').style.display='block'">➕ 添加成员</button>
         <a href="/logout" class="btn btn-secondary">🚪 退出</a>
     </div>
+
+    <div id="addPanel" style="display:none; padding:0 16px 16px;">
+        <form method="POST" action="/admin/member/add" style="background:white;padding:16px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+            <div style="font-weight:600;margin-bottom:10px;color:#374151;">添加成员</div>
+            <input name="name" placeholder="姓名 *" required style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #ccc;border-radius:8px;">
+            <input name="company" placeholder="公司名称" style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #ccc;border-radius:8px;">
+            <input name="phone" placeholder="手机号" style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #ccc;border-radius:8px;">
+            <div style="display:flex;gap:8px;">
+                <button class="btn btn-primary" style="flex:1;">添加</button>
+                <button type="button" class="btn btn-secondary" style="flex:1;" onclick="document.getElementById('addPanel').style.display='none'">取消</button>
+            </div>
+        </form>
+    </div>
+
+    {% if msg %}<div style="margin:0 16px 12px;padding:10px 14px;border-radius:8px;background:#D1FAE5;color:#047857;font-size:13px;">✅ {{ msg }}</div>{% endif %}
+    {% if error %}<div style="margin:0 16px 12px;padding:10px 14px;border-radius:8px;background:#FEE2E2;color:#B91C1C;font-size:13px;">⚠️ {{ error }}</div>{% endif %}
 
     <div class="section-title">
         <span>📋 成员进度</span>
@@ -101,6 +122,7 @@
                 <th>累计</th>
                 <th>连续</th>
                 <th>奖档</th>
+                <th>操作</th>
             </tr>
         </thead>
         <tbody>
@@ -120,6 +142,11 @@
                     {% elif '达标' in r.award %}<span class="badge badge-pass">{{ r.award }}</span>
                     {% else %}<span class="badge badge-none">{{ r.award }}</span>{% endif %}
                 </td>
+                <td>
+                    <button class="row-btn" onclick="openModal({{ r.id }}, '{{ r.name }}', '{{ r.wechat_id or '' }}', '{{ r.phone or '' }}')">编辑</button>
+                    <button class="row-btn" onclick="openAdjust({{ r.id }}, '{{ r.name }}')">改分</button>
+                    <button class="row-btn danger" onclick="delMember({{ r.id }}, '{{ r.name }}')">删除</button>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -128,5 +155,55 @@
     <div style="padding:24px;text-align:center;color:#9CA3AF;font-size:12px;">
         点击姓名可查看该成员详细打卡记录
     </div>
+
+    <div id="m" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99;align-items:center;justify-content:center;">
+        <div style="background:white;border-radius:12px;padding:20px;width:90%;max-width:360px;">
+            <h3 id="mTitle" style="margin-bottom:12px;color:#1E40AF;"></h3>
+            <form id="mForm" method="POST">
+                <div id="mEditFields">
+                    <input id="mName" name="name" placeholder="姓名 *" required style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #ccc;border-radius:8px;">
+                    <input id="mCompany" name="company" placeholder="公司名称" style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #ccc;border-radius:8px;">
+                    <input id="mPhone" name="phone" placeholder="手机号" style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #ccc;border-radius:8px;">
+                </div>
+                <div id="mAdjustFields" style="display:none;">
+                    <input name="points" type="number" placeholder="加减分，如 +5 或 -3" style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #ccc;border-radius:8px;">
+                    <input name="note" placeholder="原因说明" style="width:100%;padding:10px;margin-bottom:8px;border:1px solid #ccc;border-radius:8px;">
+                </div>
+                <div style="display:flex;gap:8px;margin-top:8px;">
+                    <button type="submit" class="btn btn-primary" style="flex:1;">确定</button>
+                    <button type="button" class="btn btn-secondary" style="flex:1;" onclick="closeModal()">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script>
+    function openModal(id, name, company, phone){
+        document.getElementById('mTitle').textContent = '编辑：' + name;
+        document.getElementById('mForm').action = '/admin/member/' + id + '/edit';
+        document.getElementById('mEditFields').style.display = 'block';
+        document.getElementById('mAdjustFields').style.display = 'none';
+        document.getElementById('mName').value = name;
+        document.getElementById('mCompany').value = company;
+        document.getElementById('mPhone').value = phone;
+        document.getElementById('m').style.display = 'flex';
+    }
+    function openAdjust(id, name){
+        document.getElementById('mTitle').textContent = '手动改分：' + name;
+        document.getElementById('mForm').action = '/admin/member/' + id + '/adjust';
+        document.getElementById('mEditFields').style.display = 'none';
+        document.getElementById('mAdjustFields').style.display = 'block';
+        document.getElementById('m').style.display = 'flex';
+    }
+    function closeModal(){ document.getElementById('m').style.display = 'none'; }
+    function delMember(id, name){
+        if(confirm('确认软删除【' + name + '】？\n其打卡记录会保留，但不再出现在榜单。')){
+            var f = document.createElement('form');
+            f.method = 'POST';
+            f.action = '/admin/member/' + id + '/delete';
+            document.body.appendChild(f);
+            f.submit();
+        }
+    }
+    </script>
 </body>
 </html>
