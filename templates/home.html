@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>我的打卡 - 约克超级品牌日打卡系统</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+            background: #F5F7FA; min-height: 100vh; padding-bottom: 80px;
+        }
+        .header {
+            background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+            color: white; padding: 24px 20px; border-radius: 0 0 20px 20px;
+        }
+        .greeting { font-size: 14px; opacity: 0.9; }
+        .name { font-size: 22px; font-weight: 600; margin: 4px 0 16px; }
+        .stats-row { display: flex; gap: 12px; }
+        .stat {
+            background: rgba(255,255,255,0.2); backdrop-filter: blur(10px);
+            padding: 12px; border-radius: 12px; flex: 1; text-align: center;
+        }
+        .stat-label { font-size: 12px; opacity: 0.85; }
+        .stat-value { font-size: 24px; font-weight: 700; margin-top: 2px; }
+        .section-title {
+            font-size: 15px; color: #374151; font-weight: 600; padding: 18px 20px 8px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .badge { background: #DBEAFE; color: #1E40AF; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+        .badge.green { background: #D1FAE5; color: #047857; }
+        .badge.gray { background: #F3F4F6; color: #6B7280; }
+
+        .checkin-card {
+            background: white; margin: 8px 20px; border-radius: 14px; overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .checkin-row {
+            display: flex; align-items: center; padding: 16px;
+            border-bottom: 1px solid #F3F4F6; cursor: pointer; transition: background 0.15s;
+        }
+        .checkin-row:active { background: #F9FAFB; }
+        .checkin-row:last-child { border-bottom: none; }
+        .icon {
+            width: 44px; height: 44px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; flex-shrink: 0; margin-right: 14px;
+        }
+        .ic-morning { background: #FEF3C7; }
+        .ic-evening { background: #E0E7FF; }
+        .ic-optional { background: #DCFCE7; }
+        .ic-done { background: #D1FAE5; color: #047857; }
+        .info { flex: 1; }
+        .info-title { font-size: 15px; font-weight: 500; color: #111827; }
+        .info-sub { font-size: 12px; color: #6B7280; margin-top: 2px; }
+        .points { font-size: 13px; color: #6B7280; }
+        .points-num { color: #1E40AF; font-weight: 600; }
+
+        .nav-bar {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: white; display: flex; padding: 8px 0 16px;
+            border-top: 1px solid #E5E7EB; z-index: 10;
+        }
+        .nav-item {
+            flex: 1; text-align: center; color: #6B7280; font-size: 11px; padding: 4px 0;
+        }
+        .nav-item.active { color: #1E40AF; }
+        .nav-icon { font-size: 22px; display: block; }
+
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.5); z-index: 100;
+            align-items: flex-end; justify-content: center;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: white; width: 100%; max-width: 500px;
+            border-radius: 20px 20px 0 0; padding: 20px;
+            max-height: 80vh; overflow-y: auto;
+        }
+        .modal h3 { font-size: 18px; color: #111827; margin-bottom: 4px; }
+        .modal .modal-sub { color: #6B7280; font-size: 13px; margin-bottom: 16px; }
+        .form-group { margin-bottom: 14px; }
+        .form-group label { display: block; font-size: 13px; color: #374151; margin-bottom: 6px; font-weight: 500; }
+        .form-group textarea, .form-group input {
+            width: 100%; padding: 10px 12px; border: 1.5px solid #E5E7EB; border-radius: 8px;
+            font-size: 14px; font-family: inherit;
+        }
+        .form-group textarea { min-height: 80px; resize: vertical; }
+        .photo-input {
+            display: block; padding: 12px; border: 2px dashed #D1D5DB; border-radius: 8px;
+            text-align: center; color: #6B7280; cursor: pointer; background: #FAFAFA;
+        }
+        .photo-input.has-photo { border-color: #10B981; background: #ECFDF5; color: #047857; }
+        .preview { max-width: 100%; border-radius: 8px; margin-top: 8px; display: none; }
+        .submit-btn {
+            width: 100%; padding: 14px; background: #1E40AF; color: white;
+            border: none; border-radius: 10px; font-size: 16px; font-weight: 600; margin-top: 8px;
+        }
+        .submit-btn:disabled { background: #9CA3AF; }
+        .cancel-btn {
+            width: 100%; padding: 12px; background: transparent; color: #6B7280;
+            border: none; font-size: 14px; margin-top: 4px;
+        }
+
+        .toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background: #10B981; color: white; padding: 12px 20px;
+            border-radius: 8px; font-size: 14px; z-index: 200;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .toast.error { background: #EF4444; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="greeting">{{ now_time }} · 今日 {{ today.total }}/8 分</div>
+        <div class="name">{{ name }}，{{ '早上好' if now_time < '12:00' else ('下午好' if now_time < '18:00' else '晚上好') }} 👋</div>
+        <div class="stats-row">
+            <div class="stat">
+                <div class="stat-label">今日得分</div>
+                <div class="stat-value">{{ today.total }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">累计总分</div>
+                <div class="stat-value">{{ total_score }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">打卡天数</div>
+                <div class="stat-value">{{ total_days }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-title">
+        <span>📌 必做项（每日 2 分）</span>
+        <span class="badge {% if today.has_morning and today.has_evening %}green{% endif %}">
+            {% if today.has_morning and today.has_evening %}已完成{% else %}{{ today.required_points }}/2{% endif %}
+        </span>
+    </div>
+    <div class="checkin-card">
+        <div class="checkin-row" onclick="openCheckin('morning')">
+            <div class="icon {% if today.has_morning %}ic-done{% else %}ic-morning{% endif %}">{% if today.has_morning %}✓{% else %}🌅{% endif %}</div>
+            <div class="info">
+                <div class="info-title">早目标打卡</div>
+                <div class="info-sub">9:30 前发布当日目标</div>
+            </div>
+            <div class="points"><span class="points-num">+1</span> 分</div>
+        </div>
+        <div class="checkin-row" onclick="openCheckin('evening')">
+            <div class="icon {% if today.has_evening %}ic-done{% else %}ic-evening{% endif %}">{% if today.has_evening %}✓{% else %}🌙{% endif %}</div>
+            <div class="info">
+                <div class="info-title">晚总结打卡</div>
+                <div class="info-sub">20:00 前提交当日总结</div>
+            </div>
+            <div class="points"><span class="points-num">+1</span> 分</div>
+        </div>
+    </div>
+
+    <div class="section-title">
+        <span>🎯 选做项（每日封顶 6 分）</span>
+        <span class="badge">{{ today.optional_points }}/6</span>
+    </div>
+    <div class="checkin-card">
+        <div class="checkin-row" onclick="openCheckin('designer')">
+            <div class="icon ic-optional">👔</div>
+            <div class="info">
+                <div class="info-title">设计师拜访</div>
+                <div class="info-sub">需提供拜访照片(带水印)/沟通记录</div>
+            </div>
+            <div class="points">+1·封顶2</div>
+        </div>
+        <div class="checkin-row" onclick="openCheckin('cross')">
+            <div class="icon ic-optional">🏢</div>
+            <div class="info">
+                <div class="info-title">异业拜访</div>
+                <div class="info-sub">装修/建材等渠道(带水印)</div>
+            </div>
+            <div class="points">+1·封顶2</div>
+        </div>
+        <div class="checkin-row" onclick="openCheckin('oldcustomer')">
+            <div class="icon ic-optional">🤝</div>
+            <div class="info">
+                <div class="info-title">老顾客维护</div>
+                <div class="info-sub">回访/保养提醒/节日问候</div>
+            </div>
+            <div class="points">+1·封顶1</div>
+        </div>
+        <div class="checkin-row" onclick="openCheckin('moment')">
+            <div class="icon ic-optional">📱</div>
+            <div class="info">
+                <div class="info-title">朋友圈发布</div>
+                <div class="info-sub">约克品牌/产品/活动</div>
+            </div>
+            <div class="points">+1·封顶1</div>
+        </div>
+        <div class="checkin-row" onclick="openCheckin('newlead')">
+            <div class="icon ic-optional">🆕</div>
+            <div class="info">
+                <div class="info-title">新增意向客户</div>
+                <div class="info-sub">e2e 系统录入</div>
+            </div>
+            <div class="points">+1·封顶2</div>
+        </div>
+        <div class="checkin-row" onclick="openCheckin('followup')">
+            <div class="icon ic-optional">💬</div>
+            <div class="info">
+                <div class="info-title">顾客跟进谈单</div>
+                <div class="info-sub">跟单阶段及反馈截图</div>
+            </div>
+            <div class="points">+1·封顶2</div>
+        </div>
+    </div>
+
+    <div style="text-align: center; padding: 16px; color: #9CA3AF; font-size: 12px;">
+        异议请在群内联系管理员申诉，24h 内处理
+    </div>
+
+    <div class="nav-bar">
+        <div class="nav-item active">
+            <span class="nav-icon">🏠</span>今日打卡
+        </div>
+        <div class="nav-item" onclick="location.href='/leaderboard'">
+            <span class="nav-icon">🏆</span>看榜单
+        </div>
+        <div class="nav-item" onclick="if(confirm('确定退出登录？')) location.href='/logout'">
+            <span class="nav-icon">🚪</span>退出
+        </div>
+    </div>
+
+    <div id="modal" class="modal-overlay">
+        <div class="modal">
+            <h3 id="modal-title">打卡</h3>
+            <div class="modal-sub" id="modal-sub"></div>
+            <form id="checkin-form" enctype="multipart/form-data">
+                <input type="hidden" name="check_type" id="check_type">
+                <div class="form-group">
+                    <label>说明（必填）</label>
+                    <textarea name="content" required placeholder="例：拜访了X设计师，沟通了XX方案，约定周四再访"></textarea>
+                </div>
+                <div class="form-group" id="photo-group">
+                    <label>照片（必填）</label>
+                    <label class="photo-input" id="photo-label">
+                        <span id="photo-text">📷 点击拍照/上传</span>
+                        <input type="file" name="photo" accept="image/*" capture="environment" style="display:none" id="photo-input">
+                    </label>
+                    <img id="preview" class="preview">
+                </div>
+                <button type="submit" class="submit-btn">提交打卡</button>
+                <button type="button" class="cancel-btn" onclick="closeModal()">取消</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const TYPE_LABELS = {
+            morning: { title: '🌅 早目标打卡', sub: '请写下今天要达成的目标', needPhoto: false, deadline: '9:30' },
+            evening: { title: '🌙 晚总结打卡', sub: '请写下今天的总结（早目标必须完成）', needPhoto: false, deadline: '20:00' },
+            designer: { title: '👔 设计师拜访', sub: '请说明拜访对象与沟通要点', needPhoto: true },
+            cross: { title: '🏢 异业拜访', sub: '请说明渠道与对接内容', needPhoto: true },
+            oldcustomer: { title: '🤝 老顾客维护', sub: '回访/保养提醒/节日问候', needPhoto: true },
+            moment: { title: '📱 朋友圈发布', sub: '已发布的朋友圈内容简介', needPhoto: true },
+            newlead: { title: '🆕 新增意向客户', sub: '客户来源、需求、跟进计划', needPhoto: false },
+            followup: { title: '💬 顾客跟进谈单', sub: '跟单阶段、反馈记录', needPhoto: true },
+        };
+
+        function openCheckin(type) {
+            const cfg = TYPE_LABELS[type];
+            document.getElementById('modal-title').textContent = cfg.title;
+            document.getElementById('modal-sub').textContent = cfg.sub;
+            document.getElementById('check_type').value = type;
+            const photoGroup = document.getElementById('photo-group');
+            photoGroup.style.display = cfg.needPhoto ? 'block' : 'none';
+            if (!cfg.needPhoto) {
+                document.getElementById('photo-input').removeAttribute('required');
+            } else {
+                document.getElementById('photo-input').setAttribute('required', 'required');
+            }
+            document.getElementById('modal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('show');
+            document.getElementById('checkin-form').reset();
+            document.getElementById('preview').style.display = 'none';
+            document.getElementById('photo-label').classList.remove('has-photo');
+            document.getElementById('photo-text').textContent = '📷 点击拍照/上传';
+        }
+
+        const photoInput = document.getElementById('photo-input');
+        photoInput.addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(ev) {
+                const dataUrl = ev.target.result;
+                // 客户端加水印：时间戳 + 姓名 + 类型
+                const watermarked = await addWatermark(dataUrl);
+                document.getElementById('preview').src = watermarked;
+                document.getElementById('preview').style.display = 'block';
+                document.getElementById('photo-label').classList.add('has-photo');
+                document.getElementById('photo-text').textContent = '✓ 已选择并加水印';
+                // 把水印后的图转回blob提交
+                fetch(watermarked).then(r => r.blob()).then(blob => {
+                    const newFile = new File([blob], file.name, { type: 'image/jpeg' });
+                    const dt = new DataTransfer();
+                    dt.items.add(newFile);
+                    photoInput.files = dt.files;
+                });
+            };
+            reader.readAsDataURL(file);
+        });
+
+        async function addWatermark(srcUrl) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const maxW = 1280;
+                    const scale = img.width > maxW ? maxW / img.width : 1;
+                    canvas.width = img.width * scale;
+                    canvas.height = img.height * scale;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    // 水印参数
+                    const now = new Date();
+                    const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+                    const name = '{{ name }}';
+                    const watermarkText = `${name} · ${ts}`;
+
+                    // 半透明黑底
+                    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                    ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
+
+                    // 水印文字
+                    ctx.font = 'bold 22px sans-serif';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('📍 ' + watermarkText, 16, canvas.height - 25);
+
+                    // 右上角加打卡类型标识
+                    ctx.fillStyle = 'rgba(30, 64, 175, 0.85)';
+                    ctx.fillRect(canvas.width - 110, 10, 100, 36);
+                    ctx.font = 'bold 16px sans-serif';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('约克打卡', canvas.width - 60, 30);
+                    ctx.textAlign = 'start';
+
+                    resolve(canvas.toDataURL('image/jpeg', 0.85));
+                };
+                img.src = srcUrl;
+            });
+        }
+
+        document.getElementById('checkin-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const btn = e.target.querySelector('.submit-btn');
+            btn.disabled = true;
+            btn.textContent = '提交中...';
+            try {
+                const resp = await fetch('/api/checkin', { method: 'POST', body: formData });
+                const data = await resp.json();
+                if (data.ok) {
+                    showToast(data.message);
+                    setTimeout(() => location.reload(), 1200);
+                } else {
+                    showToast(data.error, true);
+                    btn.disabled = false;
+                    btn.textContent = '提交打卡';
+                }
+            } catch (err) {
+                showToast('网络错误：' + err.message, true);
+                btn.disabled = false;
+                btn.textContent = '提交打卡';
+            }
+        });
+
+        function showToast(msg, isError) {
+            const toast = document.createElement('div');
+            toast.className = 'toast' + (isError ? ' error' : '');
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2500);
+        }
+
+        document.getElementById('modal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+    </script>
+</body>
+</html>
