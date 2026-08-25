@@ -1,0 +1,13 @@
+# 不打包进镜像的内容
+data/
+static/uploads/
+__pycache__/
+*.pyc
+venv/
+.venv/
+test_tmp/
+*.bat
+fw_dump.txt
+cloudflared.exe
+.git/
+.gitignore
