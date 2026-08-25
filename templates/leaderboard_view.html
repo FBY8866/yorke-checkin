@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>今日榜单 - {{ today }}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; background: #F5F7FA; }
+        .toolbar {
+            position: sticky; top: 0; background: white;
+            padding: 12px 16px; border-bottom: 1px solid #E5E7EB;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05); z-index: 10;
+        }
+        .toolbar h2 { font-size: 16px; color: #111827; }
+        .toolbar-actions { display: flex; gap: 8px; }
+        .btn {
+            padding: 8px 14px; border-radius: 6px; font-size: 13px;
+            cursor: pointer; border: none; font-weight: 500;
+        }
+        .btn-primary { background: #1E40AF; color: white; }
+        .btn-secondary { background: #F3F4F6; color: #374151; }
+        .preview {
+            max-width: 720px; margin: 20px auto; background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden;
+        }
+        .lb-header {
+            background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+            color: white; padding: 32px 24px; text-align: center;
+        }
+        .lb-title { font-size: 26px; font-weight: 700; }
+        .lb-sub { font-size: 14px; opacity: 0.85; margin-top: 8px; }
+        .lb-thresholds {
+            background: #FEF3C7; color: #92400E; padding: 12px;
+            font-size: 13px; text-align: center;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #E0E7FF; color: #1E40AF; padding: 14px 12px; text-align: left; font-size: 14px; font-weight: 600; }
+        td { padding: 14px 12px; border-bottom: 1px solid #F3F4F6; font-size: 15px; }
+        .rank-cell { width: 60px; text-align: center; font-weight: 700; font-size: 18px; }
+        .rank-1 { color: #D97706; }
+        .rank-2 { color: #6B7280; }
+        .rank-3 { color: #92400E; }
+        .total-cell { color: #1E40AF; font-weight: 700; font-size: 18px; }
+        .award-champion { background: #FEF3C7; color: #B45309; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .award-extra { background: #D1FAE5; color: #047857; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .award-pass { background: #DBEAFE; color: #1E40AF; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .award-none { color: #9CA3AF; }
+        .lb-footer {
+            background: #1E40AF; color: white; padding: 14px;
+            text-align: center; font-size: 12px;
+        }
+        .hint {
+            max-width: 720px; margin: 0 auto; padding: 12px 24px;
+            color: #6B7280; font-size: 13px;
+            background: #FEF3C7; border-radius: 8px; margin-top: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <h2>📤 今日榜单（{{ today }}）</h2>
+        <div class="toolbar-actions">
+            <button class="btn btn-primary" onclick="downloadImage()">⬇️ 下载图片</button>
+            <button class="btn btn-secondary" onclick="copyText()">📋 复制文字</button>
+            <a href="/admin" class="btn btn-secondary">返回后台</a>
+        </div>
+    </div>
+
+    <div class="preview" id="preview">
+        <div class="lb-header">
+            <div class="lb-title">约克超级品牌日打卡系统榜单</div>
+            <div class="lb-sub">更新于 {{ today }} · 共 {{ rows|length }} 人</div>
+        </div>
+        <div class="lb-thresholds">
+            🏅 达标奖 ≥180分(¥200) &nbsp;·&nbsp; 🥈 超额奖 ≥240分(+¥200) &nbsp;·&nbsp; 🥇 冠军奖 第1名≥220分(+¥200)
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>排名</th>
+                    <th>姓名</th>
+                    <th>今日</th>
+                    <th>累计</th>
+                    <th>连续</th>
+                    <th>奖档</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td class="rank-cell {% if loop.index == 1 %}rank-1{% elif loop.index == 2 %}rank-2{% elif loop.index == 3 %}rank-3{% endif %}">
+                        {{ loop.index }}
+                    </td>
+                    <td>{{ r.name }}</td>
+                    <td>{{ r.today }}</td>
+                    <td class="total-cell">{{ r.total }}</td>
+                    <td>{{ r.streak }}天</td>
+                    <td>
+                        {% set award = '' %}
+                        {% if loop.index == 1 and r.total >= 220 %}<span class="award-champion">🥇 冠军</span>
+                        {% elif r.total >= 240 %}<span class="award-extra">超额</span>
+                        {% elif r.total >= 180 %}<span class="award-pass">达标</span>
+                        {% else %}<span class="award-none">-</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="lb-footer">
+            每日21:00更新 · 异议24h内申诉 · 最高累计¥600
+        </div>
+    </div>
+
+    <div class="hint">
+        💡 <strong>发布到群里的姿势</strong>：① 点击"下载图片"得到榜单图，发群里；② 或点击"复制文字"，把纯文本发群里；③ 推荐每天固定 21:00 发。
+    </div>
+
+    <script>
+        function downloadImage() {
+            window.location.href = '/admin/leaderboard_image';
+        }
+
+        function copyText() {
+            const rows = {{ rows|tojson }};
+            const today = '{{ today }}';
+            let text = `📊 约克超级品牌日打卡系统榜单\n更新于 ${today}\n\n`;
+            text += '排名  姓名    今日  累计  连续\n';
+            text += '─'.repeat(40) + '\n';
+            rows.forEach((r, i) => {
+                let award = '';
+                if (i === 0 && r.total >= 220) award = '🥇冠军';
+                else if (r.total >= 240) award = '超额';
+                else if (r.total >= 180) award = '达标';
+                text += `${(i+1).toString().padStart(2)}   ${r.name.padEnd(8)} ${r.today.toString().padStart(2)}    ${r.total.toString().padStart(3)}    ${r.streak}天   ${award}\n`;
+            });
+            text += '\n🏅达标≥180 · 超额≥240 · 冠军第1名≥220\n异议24h内申诉';
+
+            navigator.clipboard.writeText(text).then(() => {
+                alert('已复制到剪贴板，去群里粘贴吧！');
+            });
+        }
+    </script>
+</body>
+</html>
