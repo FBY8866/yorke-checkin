@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>榜单 - 约克超级品牌日打卡系统</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; background: #F5F7FA; }
+        .header {
+            background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+            color: white; padding: 24px 20px; text-align: center;
+        }
+        .header h1 { font-size: 22px; }
+        .header p { opacity: 0.85; font-size: 13px; margin-top: 6px; }
+        .container { max-width: 600px; margin: 0 auto; padding: 16px; }
+        .row {
+            background: white; padding: 16px; border-radius: 12px;
+            margin-bottom: 8px; display: flex; align-items: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .rank {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 15px; margin-right: 14px;
+            background: #F3F4F6; color: #6B7280;
+        }
+        .rank.gold { background: #FEF3C7; color: #B45309; }
+        .rank.silver { background: #F3F4F6; color: #4B5563; }
+        .rank.bronze { background: #FED7AA; color: #9A3412; }
+        .name { flex: 1; font-size: 15px; color: #111827; font-weight: 500; }
+        .score { font-size: 22px; color: #1E40AF; font-weight: 700; }
+        .empty { text-align: center; color: #9CA3AF; padding: 40px 20px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏆 累计榜单</h1>
+        <p>约克超级品牌日打卡系统 · 当前共 {{ rows|length }} 人参与</p>
+    </div>
+    <div class="container">
+        {% if not rows %}
+        <div class="empty">还没有人打卡，快去抢第一！</div>
+        {% else %}
+        {% for r in rows %}
+        <div class="row">
+            <div class="rank {% if loop.index == 1 %}gold{% elif loop.index == 2 %}silver{% elif loop.index == 3 %}bronze{% endif %}">
+                {{ loop.index }}
+            </div>
+            <div class="name">{{ r.name }}</div>
+            <div class="score">{{ r.total }}<span style="font-size:12px;color:#6B7280;font-weight:400;"> 分</span></div>
+        </div>
+        {% endfor %}
+        {% endif %}
+        <div style="text-align:center;padding:24px;color:#9CA3AF;font-size:12px;">
+            达标奖 ≥180分 · 超额奖 ≥240分 · 冠军奖 第1名≥220分
+        </div>
+    </div>
+</body>
+</html>
