@@ -110,6 +110,16 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
         .toast.error { background: #EF4444; }
+
+        .record-row { padding: 14px 16px; border-bottom: 1px solid #F3F4F6; }
+        .record-row:last-child { border-bottom: none; }
+        .rec-head { display: flex; align-items: center; gap: 8px; }
+        .rec-type { font-size: 14px; font-weight: 600; color: #111827; }
+        .rec-time { font-size: 12px; color: #6B7280; }
+        .rec-points { margin-left: auto; font-size: 13px; color: #1E40AF; font-weight: 600; }
+        .rec-content { font-size: 13px; color: #374151; margin-top: 6px; line-height: 1.5; word-break: break-all; }
+        .rec-addr { font-size: 12px; color: #047857; margin-top: 4px; }
+        .rec-photo { max-width: 100%; border-radius: 8px; margin-top: 8px; display: block; }
     </style>
 </head>
 <body>
@@ -143,7 +153,7 @@
             <div class="icon {% if today.has_morning %}ic-done{% else %}ic-morning{% endif %}">{% if today.has_morning %}✓{% else %}🌅{% endif %}</div>
             <div class="info">
                 <div class="info-title">早目标打卡</div>
-                <div class="info-sub">9:30 前发布当日目标</div>
+                <div class="info-sub">发布当日目标（任意时间可打）</div>
             </div>
             <div class="points"><span class="points-num">+1</span> 分</div>
         </div>
@@ -212,6 +222,30 @@
         </div>
     </div>
 
+    {% set TNAME = {'morning':'🌅 早目标','evening':'🌙 晚总结','designer':'👔 设计师拜访','cross':'🏢 异业拜访','oldcustomer':'🤝 老顾客维护','moment':'📱 朋友圈','newlead':'🆕 新增意向','followup':'💬 跟进谈单'} %}
+    <div class="section-title">
+        <span>📋 今日打卡记录</span>
+        <span class="badge">{{ today_records|length }} 条</span>
+    </div>
+    <div class="checkin-card">
+        {% if not today_records %}
+        <div style="padding:20px;text-align:center;color:#9CA3AF;font-size:13px;">今天还没有打卡记录</div>
+        {% else %}
+        {% for rec in today_records %}
+        <div class="record-row">
+            <div class="rec-head">
+                <span class="rec-type">{{ TNAME.get(rec.check_type, rec.check_type) }}</span>
+                <span class="rec-time">{{ rec.submitted_at }}</span>
+                <span class="rec-points">+{{ rec.points }} 分</span>
+            </div>
+            {% if rec.content %}<div class="rec-content">{{ rec.content }}</div>{% endif %}
+            {% if rec.address %}<div class="rec-addr">📍 {{ rec.address }}</div>{% endif %}
+            {% if rec.photo_path %}<img src="/{{ rec.photo_path }}" class="rec-photo" alt="打卡照片">{% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+
     <div style="text-align: center; padding: 16px; color: #9CA3AF; font-size: 12px;">
         异议请在群内联系管理员申诉，24h 内处理
     </div>
@@ -234,6 +268,8 @@
             <div class="modal-sub" id="modal-sub"></div>
             <form id="checkin-form" enctype="multipart/form-data">
                 <input type="hidden" name="check_type" id="check_type">
+                <input type="hidden" name="lat" id="lat">
+                <input type="hidden" name="lng" id="lng">
                 <div class="form-group">
                     <label>说明（必填）</label>
                     <textarea name="content" required placeholder="例：拜访了X设计师，沟通了XX方案，约定周四再访"></textarea>
@@ -241,10 +277,11 @@
                 <div class="form-group" id="photo-group">
                     <label>照片（必填）</label>
                     <label class="photo-input" id="photo-label">
-                        <span id="photo-text">📷 点击拍照/上传</span>
-                        <input type="file" name="photo" accept="image/*" capture="environment" style="display:none" id="photo-input">
+                        <span id="photo-text">📷 点击拍照 / 从相册选择</span>
+                        <input type="file" name="photo" accept="image/*" style="display:none" id="photo-input">
                     </label>
                     <img id="preview" class="preview">
+                <div style="font-size:12px;color:#9CA3AF;margin-top:6px;line-height:1.4;">如在微信内无法选择照片，请点右上角「···」→「在浏览器中打开」再上传</div>
                 </div>
                 <button type="submit" class="submit-btn">提交打卡</button>
                 <button type="button" class="cancel-btn" onclick="closeModal()">取消</button>
@@ -254,8 +291,8 @@
 
     <script>
         const TYPE_LABELS = {
-            morning: { title: '🌅 早目标打卡', sub: '请写下今天要达成的目标', needPhoto: false, deadline: '9:30' },
-            evening: { title: '🌙 晚总结打卡', sub: '请写下今天的总结（早目标必须完成）', needPhoto: false, deadline: '20:00' },
+            morning: { title: '🌅 早目标打卡', sub: '请写下今天要达成的目标', needPhoto: false },
+            evening: { title: '🌙 晚总结打卡', sub: '请写下今天的总结', needPhoto: false, deadline: '20:00' },
             designer: { title: '👔 设计师拜访', sub: '请说明拜访对象与沟通要点', needPhoto: true },
             cross: { title: '🏢 异业拜访', sub: '请说明渠道与对接内容', needPhoto: true },
             oldcustomer: { title: '🤝 老顾客维护', sub: '回访/保养提醒/节日问候', needPhoto: true },
@@ -288,74 +325,42 @@
         }
 
         const photoInput = document.getElementById('photo-input');
-        photoInput.addEventListener('change', async function(e) {
+        photoInput.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = async function(ev) {
-                const dataUrl = ev.target.result;
-                // 客户端加水印：时间戳 + 姓名 + 类型
-                const watermarked = await addWatermark(dataUrl);
-                document.getElementById('preview').src = watermarked;
+            reader.onload = function(ev) {
+                // 仅本地预览；水印由服务端自动添加，避免客户端 canvas 处理失败导致传不上照片
+                document.getElementById('preview').src = ev.target.result;
                 document.getElementById('preview').style.display = 'block';
                 document.getElementById('photo-label').classList.add('has-photo');
-                document.getElementById('photo-text').textContent = '✓ 已选择并加水印';
-                // 把水印后的图转回blob提交
-                fetch(watermarked).then(r => r.blob()).then(blob => {
-                    const newFile = new File([blob], file.name, { type: 'image/jpeg' });
-                    const dt = new DataTransfer();
-                    dt.items.add(newFile);
-                    photoInput.files = dt.files;
-                });
+                document.getElementById('photo-text').textContent = '✓ 已选照片（自动加水印）';
             };
             reader.readAsDataURL(file);
         });
 
-        async function addWatermark(srcUrl) {
+        // 获取定位（需 HTTPS 或 localhost；HTTP 下浏览器会禁用，失败返回 null 不影响打卡）
+        function getLocation() {
             return new Promise((resolve) => {
-                const img = new Image();
-                img.onload = function() {
-                    const canvas = document.createElement('canvas');
-                    const maxW = 1280;
-                    const scale = img.width > maxW ? maxW / img.width : 1;
-                    canvas.width = img.width * scale;
-                    canvas.height = img.height * scale;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-                    // 水印参数
-                    const now = new Date();
-                    const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-                    const name = '{{ name }}';
-                    const watermarkText = `${name} · ${ts}`;
-
-                    // 半透明黑底
-                    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                    ctx.fillRect(0, canvas.height - 50, canvas.width, 50);
-
-                    // 水印文字
-                    ctx.font = 'bold 22px sans-serif';
-                    ctx.fillStyle = '#ffffff';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText('📍 ' + watermarkText, 16, canvas.height - 25);
-
-                    // 右上角加打卡类型标识
-                    ctx.fillStyle = 'rgba(30, 64, 175, 0.85)';
-                    ctx.fillRect(canvas.width - 110, 10, 100, 36);
-                    ctx.font = 'bold 16px sans-serif';
-                    ctx.fillStyle = '#ffffff';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('约克打卡', canvas.width - 60, 30);
-                    ctx.textAlign = 'start';
-
-                    resolve(canvas.toDataURL('image/jpeg', 0.85));
-                };
-                img.src = srcUrl;
+                if (!navigator.geolocation) return resolve(null);
+                navigator.geolocation.getCurrentPosition(
+                    (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
+                    () => resolve(null),
+                    { enableHighAccuracy: false, timeout: 6000, maximumAge: 120000 }
+                );
             });
         }
 
         document.getElementById('checkin-form').addEventListener('submit', async function(e) {
             e.preventDefault();
+            // 先尝试获取定位并填入隐藏域（需 HTTPS/localhost；HTTP 下浏览器禁用，失败不影响提交）
+            try {
+                const pos = await getLocation();
+                if (pos) {
+                    document.getElementById('lat').value = pos.lat;
+                    document.getElementById('lng').value = pos.lng;
+                }
+            } catch (err) {}
             const formData = new FormData(e.target);
             const btn = e.target.querySelector('.submit-btn');
             btn.disabled = true;

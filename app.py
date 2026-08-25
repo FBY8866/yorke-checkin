@@ -1,7 +1,7 @@
 """约克超级品牌日打卡系统 - 主应用"""
 import os
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import (
     Flask, render_template, request, jsonify, send_from_directory,
     redirect, url_for, session, abort, send_file
@@ -10,6 +10,16 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import uuid
 import json
+import urllib.request
+import urllib.parse
+
+CST = timezone(timedelta(hours=8))  # 中国时区 UTC+8（无夏令时，固定偏移）
+
+
+def now_cst():
+    """返回中国时区(UTC+8)当前时间，避免部署到海外服务器时日期/截止时间偏移 8 小时"""
+    return datetime.now(CST)
+
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'yorke-checkin-2026-secret-key-please-change')
@@ -17,8 +27,18 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 # 云部署/本地通用：数据目录与上传目录可用环境变量覆盖（Render 等挂载持久盘时用）
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get('DATA_DIR', os.path.join(BASE_DIR, 'data'))
-UPLOAD_DIR = os.environ.get('UPLOAD_DIR', os.path.join(BASE_DIR, 'static', 'uploads'))
+UPLOAD_DIR = os.environ.get('UPLOAD_DIR', os.path.join(DATA_DIR, 'uploads'))
 app.config['UPLOAD_FOLDER'] = UPLOAD_DIR
+
+
+@app.after_request
+def _no_cache(resp):
+    """禁止浏览器/隧道缓存动态页面，确保榜单、首页及时刷新"""
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
 
 # 确保目录存在
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -120,8 +140,8 @@ def init_db():
     # 初始化默认配置
     defaults = {
         'activity_name': '约克超级品牌日打卡系统',
-        'start_date': datetime.now().strftime('%Y-%m-%d'),
-        'end_date': (datetime.now() + timedelta(days=29)).strftime('%Y-%m-%d'),
+        'start_date': now_cst().strftime('%Y-%m-%d'),
+        'end_date': (now_cst() + timedelta(days=29)).strftime('%Y-%m-%d'),
         'morning_deadline': '09:30',
         'evening_deadline': '20:00',
         'morning_points': '1',
@@ -138,6 +158,13 @@ def init_db():
     }
     for k, v in defaults.items():
         cur.execute('INSERT OR IGNORE INTO activity_config (key, value) VALUES (?, ?)', (k, v))
+
+    # 迁移：打卡记录增加定位字段（兼容旧库，已存在则跳过）
+    cur.execute('PRAGMA table_info(checkins)')
+    existing_cols = {r[1] for r in cur.fetchall()}
+    for col, col_type in (('lat', 'REAL'), ('lng', 'REAL'), ('address', 'TEXT')):
+        if col not in existing_cols:
+            cur.execute(f'ALTER TABLE checkins ADD COLUMN {col} {col_type}')
 
     conn.commit()
     conn.close()
@@ -175,12 +202,12 @@ def compute_day_points(member_id, check_date):
     has_morning = 'morning' in required_done
     has_evening = 'evening' in required_done
 
-    # 必做项联动：早目标未完成 → 晚总结不计分
+    # 必做项：早目标、晚总结各自独立计分（互不依赖）
     required_points = 0
     if has_morning:
         required_points += MORNING_POINTS
-        if has_evening:
-            required_points += EVENING_POINTS
+    if has_evening:
+        required_points += EVENING_POINTS
 
     # 选做项
     cur.execute('''
@@ -239,6 +266,82 @@ def get_adjustment_total(member_id):
     return int(val or 0)
 
 
+def reverse_geocode(lat, lng):
+    """根据经纬度反查中文地址（OpenStreetMap Nominatim，免费无需 key）。
+    失败或超时返回 None，由调用方降级处理。"""
+    if not lat or not lng:
+        return None
+    try:
+        params = urllib.parse.urlencode({
+            'format': 'jsonv2',
+            'lat': lat,
+            'lon': lng,
+            'accept-language': 'zh-CN',
+            'zoom': 18,
+        })
+        url = 'https://nominatim.openstreetmap.org/reverse?' + params
+        req = urllib.request.Request(url, headers={'User-Agent': 'YorkeCheckin/1.0 (internal)'})
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode('utf-8', errors='ignore'))
+        address = data.get('display_name')
+        # 取前两段（省/市/区）即可，过长则截断
+        if address:
+            parts = [p.strip() for p in address.split(',')]
+            short = ''.join(parts[:3])
+            return short[:60]
+        return None
+    except Exception:
+        return None
+
+
+def get_cjk_font(size):
+    """返回支持中文的字体，找不到则回退到默认字体（避免中文水印变方块）"""
+    candidates = [
+        'C:/Windows/Fonts/msyh.ttc',          # Windows 微软雅黑
+        'C:/Windows/Fonts/simhei.ttf',        # Windows 黑体
+        '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',  # Linux 文泉驿
+        '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            try:
+                return ImageFont.truetype(p, size)
+            except Exception:
+                pass
+    return ImageFont.load_default()
+
+
+def add_watermark_pil(img_bytes, text, coord_text=None):
+    """服务端给照片加水印：底部半透明条(姓名+时间)，右上角『约克打卡』标签，可选 GPS 坐标。
+    返回处理后的 JPEG 字节；任何异常均回退原图，不阻断打卡。"""
+    try:
+        img = Image.open(io.BytesIO(img_bytes))
+        if img.mode in ('RGBA', 'P', 'LA'):
+            img = img.convert('RGB')
+        # 限制最大宽度，省存储 + 加快处理
+        max_w = 1280
+        if img.width > max_w:
+            ratio = max_w / img.width
+            img = img.resize((max_w, int(img.height * ratio)))
+        draw = ImageDraw.Draw(img)
+        bar_h = 72
+        draw.rectangle([0, img.height - bar_h, img.width, img.height], fill=(0, 0, 0))
+        f1 = get_cjk_font(26)
+        draw.text((16, img.height - 50), text, font=f1, fill=(255, 255, 255))
+        if coord_text:
+            f2 = get_cjk_font(20)
+            draw.text((16, img.height - 22), coord_text, font=f2, fill=(209, 250, 229))
+        draw.rectangle([img.width - 120, 10, img.width - 10, 48], fill=(30, 64, 175))
+        f3 = get_cjk_font(20)
+        draw.text((img.width - 65, 29), '约克打卡', font=f3, fill=(255, 255, 255), anchor='mm')
+        buf = io.BytesIO()
+        img.save(buf, 'JPEG', quality=85)
+        return buf.getvalue()
+    except Exception:
+        return img_bytes
+
+
 # ============ 路由 ============
 
 @app.route('/')
@@ -291,11 +394,17 @@ def login():
             conn.close()
             return redirect(url_for('admin_dashboard'))
         else:
-            # 成员登录：通过姓名+微信号匹配
-            cur.execute('SELECT * FROM members WHERE name = ? AND wechat_id = ? AND is_admin = 0',
-                        (name, wechat_id))
+            # 成员登录：仅按「姓名」识别同一用户，避免换设备/填错公司名称导致账号分裂、积分分散
+            cur.execute('SELECT * FROM members WHERE name = ? AND is_admin = 0 AND is_active = 1', (name,))
             existing = cur.fetchone()
             if existing:
+                # 同步最新填写的公司名称/手机号（仅作资料，不参与匹配）
+                if wechat_id or phone:
+                    cur.execute(
+                        'UPDATE members SET wechat_id = COALESCE(NULLIF(?, ""), wechat_id), '
+                        'phone = COALESCE(NULLIF(?, ""), phone) WHERE id = ?',
+                        (wechat_id, phone, existing['id']))
+                    conn.commit()
                 session['member_id'] = existing['id']
                 session['member_name'] = existing['name']
                 session['is_admin'] = False
@@ -334,8 +443,8 @@ def home():
         return redirect(url_for('admin_dashboard'))
 
     member_id = session['member_id']
-    today = datetime.now().strftime('%Y-%m-%d')
-    now_time = datetime.now().strftime('%H:%M')
+    today = now_cst().strftime('%Y-%m-%d')
+    now_time = now_cst().strftime('%H:%M')
 
     # 今日状态
     today_result = compute_day_points(member_id, today)
@@ -359,6 +468,15 @@ def home():
         total_score += result['total']
     total_score += get_adjustment_total(member_id)
 
+    # 今日打卡明细（含定位地址），用于首页展示
+    cur.execute('''
+        SELECT check_type, content, photo_path, submitted_at, points, address
+        FROM checkins
+        WHERE member_id = ? AND check_date = ? AND is_valid = 1
+        ORDER BY submitted_at ASC
+    ''', (member_id, today))
+    today_records = [dict(r) for r in cur.fetchall()]
+
     conn.close()
 
     return render_template('home.html',
@@ -366,7 +484,8 @@ def home():
                            today=today_result,
                            now_time=now_time,
                            total_days=total_days,
-                           total_score=total_score)
+                           total_score=total_score,
+                           today_records=today_records)
 
 
 @app.route('/api/checkin', methods=['POST'])
@@ -380,22 +499,42 @@ def api_checkin():
     content = request.form.get('content', '').strip()
     photo = request.files.get('photo')
 
-    now = datetime.now()
+    # 定位信息（前端 geolocation 传入，可选）
+    try:
+        lat = float(request.form.get('lat')) if request.form.get('lat') else None
+        lng = float(request.form.get('lng')) if request.form.get('lng') else None
+    except (ValueError, TypeError):
+        lat, lng = None, None
+    address = reverse_geocode(lat, lng)
+
+    now = now_cst()
     today = now.strftime('%Y-%m-%d')
     now_time = now.strftime('%H:%M')
 
     # 选做项必须要有照片 + 内容；必做项内容必填
     optional_types = ['designer', 'cross', 'oldcustomer', 'moment', 'newlead', 'followup']
-    required_types_map = {'morning': '09:30', 'evening': '20:00'}
+    required_types = ['morning', 'evening']
+    deadline_map = {'evening': '20:00'}
 
-    if check_type not in required_types_map and check_type not in optional_types:
+    if check_type not in required_types and check_type not in optional_types:
         return jsonify({'ok': False, 'error': '未知的打卡类型'}), 400
 
-    # 必做项截止时间校验
-    if check_type in required_types_map:
-        deadline = required_types_map[check_type]
+    # 必做项截止时间校验（仅晚总结）
+    if check_type in deadline_map:
+        deadline = deadline_map[check_type]
         if now_time > deadline:
             return jsonify({'ok': False, 'error': f'{check_type} 打卡已过截止时间 {deadline}'}), 400
+
+    # 防重复打卡：同一 check_type 同一天只能打一次
+    _conn = get_db()
+    _cur = _conn.cursor()
+    _cur.execute(
+        'SELECT COUNT(*) FROM checkins WHERE member_id=? AND check_date=? AND check_type=? AND is_valid=1',
+        (member_id, today, check_type))
+    if _cur.fetchone()[0] > 0:
+        _conn.close()
+        return jsonify({'ok': False, 'error': '今日该类型已打卡，请勿重复'}), 400
+    _conn.close()
 
     # 选做项要求照片
     if check_type in optional_types:
@@ -405,25 +544,30 @@ def api_checkin():
             return jsonify({'ok': False, 'error': '请填写说明文字'}), 400
 
     # 必做项要求内容
-    if check_type in required_types_map and not content:
+    if check_type in required_types and not content:
         return jsonify({'ok': False, 'error': '请填写打卡内容'}), 400
 
-    # 保存照片
+    # 保存照片（服务端加水印：时间+姓名+坐标，避免客户端 canvas 处理失败导致传不上图）
     photo_path = None
     if photo and photo.filename:
-        ext = os.path.splitext(photo.filename)[1] or '.jpg'
-        fname = f"{member_id}_{today}_{check_type}_{uuid.uuid4().hex[:6]}{ext}"
+        raw = photo.read()
+        name = session.get('member_name', '')
+        ts = now.strftime('%Y-%m-%d %H:%M')
+        coord_text = f"GPS {lat:.4f}, {lng:.4f}" if (lat is not None and lng is not None) else None
+        wm = add_watermark_pil(raw, f"{name} · {ts}", coord_text)
+        fname = f"{member_id}_{today}_{check_type}_{uuid.uuid4().hex[:6]}.jpg"
         fpath = os.path.join(app.config['UPLOAD_FOLDER'], fname)
-        photo.save(fpath)
+        with open(fpath, 'wb') as f:
+            f.write(wm)
         photo_path = f'uploads/{fname}'
 
     # 写入记录
     conn = get_db()
     cur = conn.cursor()
     cur.execute('''
-        INSERT INTO checkins (member_id, check_date, check_type, content, photo_path)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (member_id, today, check_type, content, photo_path))
+        INSERT INTO checkins (member_id, check_date, check_type, content, photo_path, lat, lng, address)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (member_id, today, check_type, content, photo_path, lat, lng, address))
     conn.commit()
 
     # 重新计算当日分
@@ -448,7 +592,7 @@ def api_today_checkins():
     if not session.get('member_id'):
         return jsonify({'ok': False}), 401
     member_id = session['member_id']
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = now_cst().strftime('%Y-%m-%d')
     conn = get_db()
     cur = conn.cursor()
     cur.execute('''
@@ -462,17 +606,14 @@ def api_today_checkins():
     return jsonify({'ok': True, 'records': records, 'today': compute_day_points(member_id, today)})
 
 
-@app.route('/leaderboard')
-def leaderboard():
-    """公开榜单"""
+def build_leaderboard():
+    """计算累计总榜与今日日榜，返回 (rows, today_rows, today)"""
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('''
-        SELECT id, name FROM members WHERE is_admin = 0 AND is_active = 1
-    ''')
+    cur.execute('SELECT id, name FROM members WHERE is_admin = 0 AND is_active = 1')
     members = [dict(r) for r in cur.fetchall()]
 
-    # 计算累计分
+    # 累计总榜
     rows = []
     for m in members:
         cur2 = conn.cursor()
@@ -483,15 +624,37 @@ def leaderboard():
         dates = [r[0] for r in cur2.fetchall()]
         total = 0
         for d in dates:
-            r = compute_day_points(m['id'], d)
-            total += r['total']
+            total += compute_day_points(m['id'], d)['total']
         total += get_adjustment_total(m['id'])
         rows.append({'name': m['name'], 'total': total})
-
     rows.sort(key=lambda x: -x['total'])
-    conn.close()
 
-    return render_template('leaderboard.html', rows=rows)
+    # 今日日榜：按今日(当天)得分排序，仅列今日有打卡分的人
+    today = now_cst().strftime('%Y-%m-%d')
+    today_rows = []
+    for m in members:
+        day = compute_day_points(m['id'], today)
+        if day['total'] > 0:
+            today_rows.append({'name': m['name'], 'total': day['total']})
+    today_rows.sort(key=lambda x: -x['total'])
+
+    conn.close()
+    return rows, today_rows, today
+
+
+@app.route('/leaderboard')
+def leaderboard():
+    """公开榜单（首屏服务端渲染，后续由前端 AJAX 每 20s 自动刷新）"""
+    rows, today_rows, today = build_leaderboard()
+    me = session.get('member_name')
+    return render_template('leaderboard.html', rows=rows, today_rows=today_rows, today=today, me=me)
+
+
+@app.route('/api/leaderboard')
+def api_leaderboard():
+    """榜单 JSON 接口，供前端定时刷新，避免整页重载导致的不及时"""
+    rows, today_rows, today = build_leaderboard()
+    return jsonify({'ok': True, 'rows': rows, 'today_rows': today_rows, 'today': today})
 
 
 @app.route('/admin')
@@ -510,7 +673,7 @@ def admin_dashboard():
     cur.execute('SELECT COUNT(*) FROM members WHERE is_admin = 0 AND is_active = 1')
     total_members = cur.fetchone()[0]
 
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = now_cst().strftime('%Y-%m-%d')
     cur.execute('SELECT COUNT(DISTINCT member_id) FROM checkins WHERE check_date = ? AND is_valid = 1', (today,))
     today_active = cur.fetchone()[0]
 
@@ -699,7 +862,7 @@ def admin_leaderboard_image():
     cur.execute('SELECT id, name FROM members WHERE is_admin = 0 AND is_active = 1')
     members = [dict(r) for r in cur.fetchall()]
 
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = now_cst().strftime('%Y-%m-%d')
     rows = []
     for m in members:
         cur2 = conn.cursor()
@@ -741,7 +904,7 @@ def admin_leaderboard_image():
     img.save(buf, format='PNG')
     buf.seek(0)
     return send_file(buf, mimetype='image/png', as_attachment=True,
-                     download_name=f'leaderboard_{datetime.now().strftime("%Y%m%d")}.png')
+                     download_name=f'leaderboard_{now_cst().strftime("%Y%m%d")}.png')
 
 
 @app.route('/admin/leaderboard_view')
@@ -756,7 +919,7 @@ def admin_leaderboard_view():
     members = [dict(r) for r in cur.fetchall()]
 
     rows = []
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = now_cst().strftime('%Y-%m-%d')
     for m in members:
         cur2 = conn.cursor()
         cur2.execute('''
@@ -837,7 +1000,7 @@ def render_leaderboard_image(rows):
     # 标题
     title = '约克超级品牌日打卡系统榜单'
     draw.text((width//2 - 180, 30), title, font=font_title, fill='white')
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = now_cst().strftime('%Y-%m-%d')
     subtitle = f'更新于 {today}  · 共 {len(rows)} 人'
     draw.text((width//2 - 110, 80), subtitle, font=font_subtitle, fill='#E0E7FF')
 

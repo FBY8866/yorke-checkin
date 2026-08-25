@@ -1,0 +1,22 @@
+# 约克超级品牌日打卡系统 - 阿里云部署
+# 用法（在服务器上）：
+#   docker compose up -d --build
+# 数据保存在命名卷 yorke-data，容器重建/重启不丢；restart: unless-stopped 实现开机自启与崩溃重启。
+services:
+  yorke-checkin:
+    build: .
+    container_name: yorke-checkin
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - DATA_DIR=/var/data/yorke
+      - UPLOAD_DIR=/var/data/yorke/uploads
+      # 生产环境建议改成随机值：openssl rand -hex 32
+      - SECRET_KEY=yorke-checkin-aliyun-2026-change-me
+    volumes:
+      - yorke-data:/var/data/yorke
+
+volumes:
+  yorke-data:

@@ -8,6 +8,9 @@ venv/
 test_tmp/
 *.bat
 fw_dump.txt
+tunnel.log
+tunnel2.log
+server.log
 cloudflared.exe
 .git/
 .gitignore

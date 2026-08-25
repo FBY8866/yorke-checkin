@@ -9,21 +9,31 @@
         body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; background: #F5F7FA; }
         .header {
             background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
-            color: white; padding: 24px 20px; text-align: center;
+            color: white; padding: 20px 20px 16px; text-align: center;
         }
         .header h1 { font-size: 22px; }
         .header p { opacity: 0.85; font-size: 13px; margin-top: 6px; }
-        .container { max-width: 600px; margin: 0 auto; padding: 16px; }
+        .refresh-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            max-width: 600px; margin: 0 auto; padding: 8px 16px; color: #6B7280; font-size: 12px;
+        }
+        .refresh-btn {
+            background: #EFF6FF; color: #1E40AF; border: none; padding: 6px 14px;
+            border-radius: 20px; font-size: 13px; font-weight: 500; cursor: pointer;
+        }
+        .refresh-btn:active { background: #DBEAFE; }
+        .container { max-width: 600px; margin: 0 auto; padding: 8px 16px 24px; }
         .row {
             background: white; padding: 16px; border-radius: 12px;
             margin-bottom: 8px; display: flex; align-items: center;
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
+        .row.me { border: 2px solid #1E40AF; background: #EFF6FF; }
         .rank {
             width: 36px; height: 36px; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             font-weight: 700; font-size: 15px; margin-right: 14px;
-            background: #F3F4F6; color: #6B7280;
+            background: #F3F4F6; color: #6B7280; flex-shrink: 0;
         }
         .rank.gold { background: #FEF3C7; color: #B45309; }
         .rank.silver { background: #F3F4F6; color: #4B5563; }
@@ -31,30 +41,97 @@
         .name { flex: 1; font-size: 15px; color: #111827; font-weight: 500; }
         .score { font-size: 22px; color: #1E40AF; font-weight: 700; }
         .empty { text-align: center; color: #9CA3AF; padding: 40px 20px; }
+        .tabs { display: flex; background: white; position: sticky; top: 0; z-index: 5; border-bottom: 1px solid #E5E7EB; }
+        .tab { flex: 1; text-align: center; padding: 14px 0; font-size: 15px; color: #6B7280; font-weight: 500; cursor: pointer; }
+        .tab.active { color: #1E40AF; border-bottom: 3px solid #1E40AF; }
+        .panel-title { font-size: 14px; color: #374151; font-weight: 600; padding: 14px 4px 4px; }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>🏆 累计榜单</h1>
-        <p>约克超级品牌日打卡系统 · 当前共 {{ rows|length }} 人参与</p>
+        <h1>🏆 打卡榜单</h1>
+        <p>约克超级品牌日打卡系统</p>
+    </div>
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('today', this)">📅 今日日榜</div>
+        <div class="tab" onclick="switchTab('total', this)">🏆 累计总榜</div>
+    </div>
+    <div class="refresh-bar">
+        <span id="updated">更新于 --:--:--</span>
+        <button class="refresh-btn" onclick="loadBoard(true)">🔄 刷新</button>
     </div>
     <div class="container">
-        {% if not rows %}
-        <div class="empty">还没有人打卡，快去抢第一！</div>
-        {% else %}
-        {% for r in rows %}
-        <div class="row">
-            <div class="rank {% if loop.index == 1 %}gold{% elif loop.index == 2 %}silver{% elif loop.index == 3 %}bronze{% endif %}">
-                {{ loop.index }}
-            </div>
-            <div class="name">{{ r.name }}</div>
-            <div class="score">{{ r.total }}<span style="font-size:12px;color:#6B7280;font-weight:400;"> 分</span></div>
+        <!-- 今日日榜 -->
+        <div id="panel-today">
+            <div class="panel-title" id="today-title">今日日榜</div>
+            <div id="today-list"><div class="empty">加载中...</div></div>
         </div>
-        {% endfor %}
-        {% endif %}
+        <!-- 累计总榜 -->
+        <div id="panel-total" style="display:none;">
+            <div class="panel-title" id="total-title">累计总榜</div>
+            <div id="total-list"><div class="empty">加载中...</div></div>
+        </div>
         <div style="text-align:center;padding:24px;color:#9CA3AF;font-size:12px;">
             达标奖 ≥180分 · 超额奖 ≥240分 · 冠军奖 第1名≥220分
         </div>
     </div>
+    <script>
+        const ME = {{ me|tojson }};
+        let timer = null;
+
+        function switchTab(which, el) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            if (el) el.classList.add('active');
+            document.getElementById('panel-today').style.display = which === 'today' ? 'block' : 'none';
+            document.getElementById('panel-total').style.display = which === 'total' ? 'block' : 'none';
+        }
+
+        function renderList(elId, titleId, rows, titlePrefix) {
+            const box = document.getElementById(elId);
+            document.getElementById(titleId).textContent = titlePrefix + (rows.length ? '（' + rows.length + ' 人）' : '（暂无）');
+            if (!rows.length) {
+                box.innerHTML = '<div class="empty">今天还没有人打卡，快去抢第一！</div>';
+                return;
+            }
+            let html = '';
+            rows.forEach((r, i) => {
+                const cls = i === 0 ? 'gold' : (i === 1 ? 'silver' : (i === 2 ? 'bronze' : ''));
+                const meCls = (ME && r.name === ME) ? ' me' : '';
+                html += '<div class="row' + meCls + '">' +
+                    '<div class="rank ' + cls + '">' + (i + 1) + '</div>' +
+                    '<div class="name">' + escapeHtml(r.name) + (meCls ? ' （我）' : '') + '</div>' +
+                    '<div class="score">' + r.total + '<span style="font-size:12px;color:#6B7280;font-weight:400;"> 分</span></div>' +
+                    '</div>';
+            });
+            box.innerHTML = html;
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        async function loadBoard(manual) {
+            try {
+                const resp = await fetch('/api/leaderboard', { cache: 'no-store' });
+                const data = await resp.json();
+                if (!data.ok) return;
+                renderList('today-list', 'today-title', data.today_rows, '今日日榜');
+                renderList('total-list', 'total-title', data.rows, '累计总榜（共 ' + data.rows.length + ' 人参与）');
+                const now = new Date();
+                document.getElementById('updated').textContent =
+                    '更新于 ' + now.toTimeString().slice(0, 8);
+            } catch (e) {
+                if (manual) document.getElementById('updated').textContent = '刷新失败，稍后重试';
+            }
+        }
+
+        // 首次加载 + 每 20 秒自动刷新，保证日榜实时
+        loadBoard(false);
+        timer = setInterval(() => loadBoard(false), 20000);
+        // 切回页面时立即刷新（解决手机后台后榜单不更新的问题）
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) loadBoard(false);
+        });
+    </script>
 </body>
 </html>
