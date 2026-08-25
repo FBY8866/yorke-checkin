@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>登录 - 约克超级品牌日打卡系统</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: white; border-radius: 16px; padding: 32px 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2); max-width: 400px; width: 100%;
+        }
+        h1 { color: #1E40AF; font-size: 24px; margin-bottom: 8px; text-align: center; }
+        .subtitle { color: #6B7280; font-size: 14px; text-align: center; margin-bottom: 28px; }
+        label { display: block; color: #374151; font-size: 14px; margin-bottom: 6px; margin-top: 14px; font-weight: 500; }
+        input[type="text"], input[type="tel"] {
+            width: 100%; padding: 12px 14px; border: 1.5px solid #E5E7EB; border-radius: 8px;
+            font-size: 16px; transition: border-color 0.2s;
+        }
+        input:focus { outline: none; border-color: #3B82F6; }
+        .row-toggle { color: #3B82F6; font-size: 13px; margin-top: 16px; text-align: center; cursor: pointer; }
+        .row-toggle:hover { text-decoration: underline; }
+        .btn {
+            width: 100%; padding: 14px; background: #1E40AF; color: white;
+            border: none; border-radius: 8px; font-size: 16px; font-weight: 600;
+            margin-top: 24px; cursor: pointer;
+        }
+        .btn:hover { background: #1E3A8A; }
+        .error { color: #DC2626; font-size: 13px; margin-top: 12px; text-align: center; }
+        .admin-section { display: none; padding-top: 16px; border-top: 1px dashed #E5E7EB; margin-top: 16px; }
+        .admin-section.show { display: block; }
+        .hint { color: #9CA3AF; font-size: 12px; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>约克超级品牌日打卡系统</h1>
+        <div class="subtitle">连续30天 · 每日满分8分 · 达标奖200元</div>
+
+        {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+        <form method="POST" action="/login">
+            <label>姓名</label>
+            <input type="text" name="name" required placeholder="请输入您的真实姓名">
+
+            <label>公司名称</label>
+            <input type="text" name="wechat_id" required placeholder="您的公司名称">
+
+            <label>手机号（选填）</label>
+            <input type="tel" name="phone" placeholder="便于申诉联系">
+
+            <div class="row-toggle" onclick="document.querySelector('.admin-section').classList.toggle('show')">
+                ⌃ 管理员登录
+            </div>
+
+            <div class="admin-section">
+                <label>管理员邀请码</label>
+                <input type="text" name="admin_code" placeholder="管理员请输入邀请码">
+                <div class="hint">仅群主/管理员可登录后台</div>
+            </div>
+
+            <button type="submit" class="btn">进入打卡系统</button>
+        </form>
+    </div>
+</body>
+</html>
