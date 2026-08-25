@@ -106,6 +106,17 @@ def init_db():
         )
     ''')
 
+    # 手动加减分记录表
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS score_adjustments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            member_id INTEGER NOT NULL,
+            points INTEGER NOT NULL,
+            note TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (member_id) REFERENCES members(id)
+        )
+    ''')
     # 初始化默认配置
     defaults = {
         'activity_name': '约克超级品牌日打卡系统',
@@ -216,6 +227,16 @@ def recompute_and_save_points(member_id, check_date):
     conn.commit()
     conn.close()
     return result
+
+
+def get_adjustment_total(member_id):
+    """获取某成员的手动加减分合计（可正可负）"""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT COALESCE(SUM(points), 0) FROM score_adjustments WHERE member_id = ?', (member_id,))
+    val = cur.fetchone()[0]
+    conn.close()
+    return int(val or 0)
 
 
 # ============ 路由 ============
@@ -336,6 +357,7 @@ def home():
     for d in all_dates:
         result = compute_day_points(member_id, d)
         total_score += result['total']
+    total_score += get_adjustment_total(member_id)
 
     conn.close()
 
@@ -463,6 +485,7 @@ def leaderboard():
         for d in dates:
             r = compute_day_points(m['id'], d)
             total += r['total']
+        total += get_adjustment_total(m['id'])
         rows.append({'name': m['name'], 'total': total})
 
     rows.sort(key=lambda x: -x['total'])
@@ -476,6 +499,9 @@ def admin_dashboard():
     """管理员仪表盘"""
     if not session.get('is_admin'):
         return redirect(url_for('index'))
+
+    msg = request.args.get('msg')
+    error = request.args.get('error')
 
     conn = get_db()
     cur = conn.cursor()
@@ -495,7 +521,7 @@ def admin_dashboard():
     evening_count = cur.fetchone()[0]
 
     # 全部成员 + 累计分
-    cur.execute('SELECT id, name, joined_at FROM members WHERE is_admin = 0 AND is_active = 1 ORDER BY id')
+    cur.execute('SELECT id, name, wechat_id, phone, joined_at FROM members WHERE is_admin = 0 AND is_active = 1 ORDER BY id')
     members = [dict(r) for r in cur.fetchall()]
 
     rows = []
@@ -510,6 +536,7 @@ def admin_dashboard():
         for d in dates:
             r = compute_day_points(m['id'], d)
             total += r['total']
+        total += get_adjustment_total(m['id'])
 
         # 计算连续天数
         dates_sorted = sorted(dates)
@@ -554,7 +581,9 @@ def admin_dashboard():
                            morning_count=morning_count,
                            evening_count=evening_count,
                            rows=rows,
-                           today=today)
+                           today=today,
+                           msg=msg,
+                           error=error)
 
 
 @app.route('/admin/member/<int:member_id>')
@@ -573,8 +602,90 @@ def admin_member_detail(member_id):
     ''', (member_id,))
     records = [dict(r) for r in cur.fetchall()]
 
+    msg = request.args.get('msg')
+    error = request.args.get('error')
     conn.close()
-    return render_template('member_detail.html', member=member, records=records)
+    return render_template('member_detail.html', member=member, records=records, msg=msg, error=error)
+
+
+@app.route('/admin/member/add', methods=['POST'])
+def admin_member_add():
+    """后台添加成员"""
+    if not session.get('is_admin'):
+        return redirect(url_for('index'))
+    name = request.form.get('name', '').strip()
+    company = request.form.get('company', '').strip()
+    phone = request.form.get('phone', '').strip()
+    if not name:
+        return redirect(url_for('admin_dashboard', error='请输入姓名'))
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT id FROM members WHERE name=? AND wechat_id=? AND is_admin=0 AND is_active=1',
+                (name, company))
+    if cur.fetchone():
+        conn.close()
+        return redirect(url_for('admin_dashboard', error='该成员已存在（同名同公司）'))
+    uid = f"m-{uuid.uuid4().hex[:8]}"
+    cur.execute(
+        'INSERT INTO members (uid, name, wechat_id, phone, is_admin) VALUES (?, ?, ?, ?, 0)',
+        (uid, name, company, phone))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_dashboard', msg='已添加成员：' + name))
+
+
+@app.route('/admin/member/<int:member_id>/delete', methods=['POST'])
+def admin_member_delete(member_id):
+    """后台软删除成员（保留打卡记录）"""
+    if not session.get('is_admin'):
+        return redirect(url_for('index'))
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('UPDATE members SET is_active=0 WHERE id=? AND is_admin=0', (member_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_dashboard', msg='已软删除该成员（打卡记录保留）'))
+
+
+@app.route('/admin/member/<int:member_id>/edit', methods=['POST'])
+def admin_member_edit(member_id):
+    """后台编辑成员资料"""
+    if not session.get('is_admin'):
+        return redirect(url_for('index'))
+    name = request.form.get('name', '').strip()
+    company = request.form.get('company', '').strip()
+    phone = request.form.get('phone', '').strip()
+    if not name:
+        return redirect(url_for('admin_member_detail', member_id=member_id, error='姓名不能为空'))
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('UPDATE members SET name=?, wechat_id=?, phone=? WHERE id=? AND is_admin=0',
+                (name, company, phone, member_id))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_member_detail', member_id=member_id, msg='资料已更新'))
+
+
+@app.route('/admin/member/<int:member_id>/adjust', methods=['POST'])
+def admin_member_adjust(member_id):
+    """后台手动加减分"""
+    if not session.get('is_admin'):
+        return redirect(url_for('index'))
+    try:
+        points = int(request.form.get('points', '0'))
+    except (ValueError, TypeError):
+        return redirect(url_for('admin_member_detail', member_id=member_id, error='分数必须是数字'))
+    if points == 0:
+        return redirect(url_for('admin_member_detail', member_id=member_id, error='分数不能为 0'))
+    note = request.form.get('note', '').strip()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('INSERT INTO score_adjustments (member_id, points, note) VALUES (?, ?, ?)',
+                (member_id, points, note))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_member_detail', member_id=member_id,
+                            msg=('已加' if points > 0 else '已减') + '分 ' + str(abs(points))))
 
 
 @app.route('/admin/leaderboard_image')
@@ -601,6 +712,7 @@ def admin_leaderboard_image():
         for d in dates:
             r = compute_day_points(m['id'], d)
             total += r['total']
+        total += get_adjustment_total(m['id'])
 
         # 今日分
         today_result = compute_day_points(m['id'], today)
@@ -656,6 +768,7 @@ def admin_leaderboard_view():
         for d in dates:
             r = compute_day_points(m['id'], d)
             total += r['total']
+        total += get_adjustment_total(m['id'])
 
         # 今日分
         today_result = compute_day_points(m['id'], today)
