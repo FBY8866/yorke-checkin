@@ -1,0 +1,27 @@
+# Render Blueprint 配置（推荐）
+# 用法：把本仓库推到 GitHub -> Render 新建 Blueprint -> 关联仓库 -> 部署
+# 该配置会：
+#   1. 用 Dockerfile 构建镜像
+#   2. 挂一个 1GB 持久盘到 /var/data/yorke，保存数据库和上传照片（不随重启丢失）
+#   3. 自动分配固定域名（如 yorke-checkin.onrender.com），30天不变
+services:
+  - type: web
+    name: yorke-checkin
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    branch: main
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: DATA_DIR
+        value: /var/data/yorke
+      - key: UPLOAD_DIR
+        value: /var/data/yorke/uploads
+      - key: SECRET_KEY
+        generateValue: true
+    disk:
+      name: yorke-data
+      mountPath: /var/data/yorke
+      sizeGB: 1
