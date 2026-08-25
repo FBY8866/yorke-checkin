@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ member.name }} - 打卡详情</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; background: #F5F7FA; }
+        .header {
+            background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+            color: white; padding: 20px;
+        }
+        .header h1 { font-size: 20px; }
+        .header p { opacity: 0.85; font-size: 13px; margin-top: 4px; }
+        .container { max-width: 800px; margin: 0 auto; padding: 16px; }
+        .back-link {
+            display: inline-block; margin: 12px 16px; color: #1E40AF;
+            text-decoration: none; font-size: 14px;
+        }
+        .record {
+            background: white; padding: 14px; margin-bottom: 8px;
+            border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .record-head {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 8px;
+        }
+        .record-type {
+            font-weight: 600; color: #1E40AF; font-size: 14px;
+        }
+        .record-date { color: #6B7280; font-size: 13px; }
+        .record-content { color: #374151; font-size: 14px; line-height: 1.5; margin-bottom: 8px; }
+        .record-photo { max-width: 100%; border-radius: 8px; margin-top: 4px; }
+        .type-morning { color: #B45309; }
+        .type-evening { color: #4338CA; }
+        .type-optional { color: #047857; }
+        .empty { text-align: center; color: #9CA3AF; padding: 40px; }
+    </style>
+</head>
+<body>
+    <a href="/admin" class="back-link">← 返回后台</a>
+    <div class="header">
+        <h1>👤 {{ member.name }}</h1>
+        <p>公司名称：{{ member.wechat_id or '未填' }} · 加入：{{ member.joined_at }}</p>
+    </div>
+    <div class="container">
+        {% if not records %}
+        <div class="empty">该成员还没有打卡记录</div>
+        {% else %}
+        {% for r in records %}
+        <div class="record">
+            <div class="record-head">
+                <span class="record-type {% if r.check_type == 'morning' %}type-morning{% elif r.check_type == 'evening' %}type-evening{% else %}type-optional{% endif %}">
+                    {% set type_names = {
+                        'morning': '🌅 早目标',
+                        'evening': '🌙 晚总结',
+                        'designer': '👔 设计师拜访',
+                        'cross': '🏢 异业拜访',
+                        'oldcustomer': '🤝 老顾客维护',
+                        'moment': '📱 朋友圈发布',
+                        'newlead': '🆕 新增意向客户',
+                        'followup': '💬 顾客跟进谈单'
+                    } %}
+                    {{ type_names.get(r.check_type, r.check_type) }}
+                </span>
+                <span class="record-date">{{ r.check_date }} · {{ r.submitted_at }}</span>
+            </div>
+            <div class="record-content">{{ r.content }}</div>
+            {% if r.photo_path %}
+            <img class="record-photo" src="/{{ r.photo_path }}" alt="打卡照片">
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+</body>
+</html>
