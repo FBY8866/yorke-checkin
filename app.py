@@ -597,16 +597,17 @@ def api_checkin():
     # 选做项必须要有照片 + 内容；必做项内容必填
     optional_types = ['designer', 'cross', 'oldcustomer', 'moment', 'newlead', 'followup']
     required_types = ['morning', 'evening']
-    deadline_map = {'evening': '20:00'}
+    deadline_map = {'morning': '10:00', 'evening': '20:00'}
+    type_cn = {'morning': '今日目标', 'evening': '今日总结'}
 
     if check_type not in required_types and check_type not in optional_types:
         return jsonify({'ok': False, 'error': '未知的打卡类型'}), 400
 
-    # 必做项截止时间校验（仅晚总结）
+    # 必做项截止时间校验：今日目标 10:00 前提交，今日总结 20:00 前提交
     if check_type in deadline_map:
         deadline = deadline_map[check_type]
         if now_time > deadline:
-            return jsonify({'ok': False, 'error': f'{check_type} 打卡已过截止时间 {deadline}'}), 400
+            return jsonify({'ok': False, 'error': f'{type_cn.get(check_type, check_type)} 请在 {deadline} 前提交'}), 400
 
     # 防重复打卡：同一 check_type 同一天只能打一次
     _conn = get_db()
