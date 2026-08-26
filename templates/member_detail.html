@@ -31,7 +31,11 @@
         }
         .record-date { color: #6B7280; font-size: 13px; }
         .record-content { color: #374151; font-size: 14px; line-height: 1.5; margin-bottom: 8px; }
-        .record-photo { max-width: 100%; border-radius: 8px; margin-top: 4px; }
+        .record-photo { max-width: 100%; border-radius: 8px; margin-top: 4px; cursor: pointer; }
+        /* 照片放大查看（灯箱） */
+        .zoom-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: none; align-items: center; justify-content: center; z-index: 2000; padding: 20px; }
+        .zoom-overlay img { max-width: 96%; max-height: 90%; border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,.6); }
+        .zoom-close { position: fixed; top: 18px; right: 18px; color: #fff; font-size: 16px; background: rgba(255,255,255,.15); padding: 8px 14px; border-radius: 20px; cursor: pointer; }
         .type-morning { color: #B45309; }
         .type-evening { color: #4338CA; }
         .type-optional { color: #047857; }
@@ -87,12 +91,27 @@
             </div>
             {% if r.customer_name %}<div class="record-content" style="color:#B45309;">👤 客户：{{ r.customer_name }}</div>{% endif %}
             <div class="record-content">{{ r.content }}</div>
+            {% if r.address %}<div class="record-content" style="color:#047857;">📍 {{ r.address }}</div>{% endif %}
             {% if r.photo_path %}
-            <img class="record-photo" src="/{{ r.photo_path }}" alt="打卡照片">
+            <img class="record-photo" src="/{{ r.photo_path }}" alt="打卡照片" onclick="openZoom('/{{ r.photo_path }}')">
             {% endif %}
         </div>
         {% endfor %}
         {% endif %}
     </div>
+    <!-- 照片放大查看（灯箱） -->
+    <div class="zoom-overlay" id="zoomOverlay" onclick="closeZoom()">
+        <img id="zoomImg" src="" alt="放大查看">
+        <div class="zoom-close" onclick="closeZoom()">✕ 关闭</div>
+    </div>
+    <script>
+        function openZoom(src) {
+            document.getElementById('zoomImg').src = src;
+            document.getElementById('zoomOverlay').style.display = 'flex';
+        }
+        function closeZoom() {
+            document.getElementById('zoomOverlay').style.display = 'none';
+        }
+    </script>
 </body>
 </html>

@@ -363,29 +363,27 @@ def get_adjustment_total(member_id):
 
 
 def reverse_geocode(lat, lng):
-    """根据经纬度反查中文地址（OpenStreetMap Nominatim，免费无需 key）。
+    """根据经纬度反查中文详细地址（BigDataCloud 免费反查，无需 key，国内服务器可访问）。
     失败或超时返回 None，由调用方降级处理。"""
     if not lat or not lng:
         return None
     try:
         params = urllib.parse.urlencode({
-            'format': 'jsonv2',
-            'lat': lat,
-            'lon': lng,
-            'accept-language': 'zh-CN',
-            'zoom': 18,
+            'latitude': lat,
+            'longitude': lng,
+            'localityLanguage': 'zh-Hans',
         })
-        url = 'https://nominatim.openstreetmap.org/reverse?' + params
-        req = urllib.request.Request(url, headers={'User-Agent': 'YorkeCheckin/1.0 (internal)'})
-        with urllib.request.urlopen(req, timeout=3) as resp:
+        url = 'https://api.bigdatacloud.net/data/reverse-geocode-client?' + params
+        req = urllib.request.Request(url, headers={'User-Agent': 'YorkeCheckin/1.0'})
+        with urllib.request.urlopen(req, timeout=4) as resp:
             data = json.loads(resp.read().decode('utf-8', errors='ignore'))
-        address = data.get('display_name')
-        # 取前两段（省/市/区）即可，过长则截断
-        if address:
-            parts = [p.strip() for p in address.split(',')]
-            short = ''.join(parts[:3])
-            return short[:60]
-        return None
+        parts = []
+        for key in ('principalSubdivision', 'city', 'cityDistrict', 'locality', 'borough', 'route', 'street'):
+            v = data.get(key)
+            if v and v not in parts:
+                parts.append(v)
+        full = ''.join(parts)
+        return full[:80] if full else None
     except Exception:
         return None
 
@@ -603,16 +601,18 @@ def api_checkin():
         if now_time > deadline:
             return jsonify({'ok': False, 'error': f'{type_cn.get(check_type, check_type)} 请在 {deadline} 前提交'}), 400
 
-    # 防重复打卡：同一 check_type 同一天只能打一次
-    _conn = get_db()
-    _cur = _conn.cursor()
-    _cur.execute(
-        'SELECT COUNT(*) FROM checkins WHERE member_id=? AND check_date=? AND check_type=? AND is_valid=1',
-        (member_id, today, check_type))
-    if _cur.fetchone()[0] > 0:
+    # 防重复打卡：必做项（今日目标/今日总结）同一天只能打一次；
+    # 选做项（拜访/发布/意向等）不限制次数，可多次打卡留痕，但计分仍按封顶规则（见 compute_day_points）。
+    if check_type in required_types:
+        _conn = get_db()
+        _cur = _conn.cursor()
+        _cur.execute(
+            'SELECT COUNT(*) FROM checkins WHERE member_id=? AND check_date=? AND check_type=? AND is_valid=1',
+            (member_id, today, check_type))
+        if _cur.fetchone()[0] > 0:
+            _conn.close()
+            return jsonify({'ok': False, 'error': '今日该类型已打卡，请勿重复'}), 400
         _conn.close()
-        return jsonify({'ok': False, 'error': '今日该类型已打卡，请勿重复'}), 400
-    _conn.close()
 
     # 选做项要求（按类型差异化）
     # - newlead: 只要客户姓名(说明、照片都不要求)
@@ -637,7 +637,13 @@ def api_checkin():
         raw = photo.read()
         name = session.get('member_name', '')
         ts = now.strftime('%Y-%m-%d %H:%M')
-        coord_text = f"GPS {lat:.4f}, {lng:.4f}" if (lat is not None and lng is not None) else None
+        # 水印显示详细地址（反查失败才降级为 GPS 坐标）
+        if address:
+            coord_text = address[:30]
+        elif lat is not None and lng is not None:
+            coord_text = f"GPS {lat:.4f},{lng:.4f}"
+        else:
+            coord_text = None
         wm = add_watermark_pil(raw, f"{name} · {ts}", coord_text)
         fname = f"{member_id}_{today}_{check_type}_{uuid.uuid4().hex[:6]}.jpg"
         fpath = os.path.join(app.config['UPLOAD_FOLDER'], fname)
@@ -711,7 +717,14 @@ def api_checkin_edit(checkin_id):
         ts = now.strftime('%Y-%m-%d %H:%M')
         lat = float(request.form.get('lat') or 0) or None
         lng = float(request.form.get('lng') or 0) or None
-        coord_text = f"GPS {lat:.4f}, {lng:.4f}" if (lat is not None and lng is not None) else None
+        address = reverse_geocode(lat, lng) if (lat is not None and lng is not None) else None
+        # 水印显示详细地址（反查失败才降级为 GPS 坐标）
+        if address:
+            coord_text = address[:30]
+        elif lat is not None and lng is not None:
+            coord_text = f"GPS {lat:.4f},{lng:.4f}"
+        else:
+            coord_text = None
         wm = add_watermark_pil(raw, f"{name} · {ts}", coord_text)
         fname = f"{rec['member_id']}_{today}_{rec['check_type']}_e{uuid.uuid4().hex[:6]}.jpg"
         fpath = os.path.join(app.config['UPLOAD_FOLDER'], fname)
@@ -723,16 +736,15 @@ def api_checkin_edit(checkin_id):
         # 同步坐标 / 地址（如有）
         lat_s = request.form.get('lat')
         lng_s = request.form.get('lng')
-        addr_s = request.form.get('address', '').strip()
         if lat_s and lng_s:
             try:
                 update_fields.append('lat = ?')
                 update_values.append(float(lat_s))
                 update_fields.append('lng = ?')
                 update_values.append(float(lng_s))
-                if addr_s:
+                if address:
                     update_fields.append('address = ?')
-                    update_values.append(addr_s)
+                    update_values.append(address)
             except ValueError:
                 pass
 
