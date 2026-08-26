@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>老板端看板 - {{ company }}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; background: #F5F7FA; padding-bottom: 40px; }
+        .header {
+            background: linear-gradient(135deg, #0F766E 0%, #14B8A6 100%);
+            color: white; padding: 20px;
+        }
+        .header h1 { font-size: 20px; }
+        .header .sub { opacity: 0.9; font-size: 13px; margin-top: 4px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .header a { color: white; opacity: 0.9; font-size: 13px; text-decoration: none; }
+        .date-input { padding: 6px 10px; border-radius: 8px; border: none; font-size: 14px; color: #111827; }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px; }
+        .stat { background: white; padding: 16px; border-radius: 12px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .stat-num { font-size: 26px; font-weight: 700; color: #0F766E; }
+        .stat-label { font-size: 12px; color: #6B7280; margin-top: 4px; }
+        .section-title { padding: 16px 20px 8px; font-size: 15px; font-weight: 600; color: #374151; }
+        table { width: calc(100% - 32px); margin: 0 16px; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        th { background: #CCFBF1; color: #0F766E; padding: 12px 8px; text-align: left; font-size: 13px; font-weight: 600; }
+        td { padding: 12px 8px; border-bottom: 1px solid #F3F4F6; font-size: 14px; color: #111827; vertical-align: top; }
+        tr:last-child td { border-bottom: none; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; background: #FEF3C7; color: #B45309; }
+        .cust { color: #B45309; font-weight: 600; }
+        .photo { max-width: 120px; border-radius: 8px; margin-top: 6px; display: block; }
+        .note { padding: 16px; color: #6B7280; font-size: 12px; line-height: 1.6; }
+        .live { font-size: 12px; color: #0F766E; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏢 {{ company }}</h1>
+        <div class="sub">
+            <span>经销商老板端 · 只读看板 · <span class="live">每 20 秒自动刷新</span></span>
+            <span>
+                <input type="date" class="date-input" value="{{ date }}" onchange="location.href='/boss/dashboard?date='+this.value">
+                <a href="/logout">🚪 退出</a>
+            </span>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat"><div class="stat-num">{{ summary.total_members }}</div><div class="stat-label">销售人数</div></div>
+        <div class="stat"><div class="stat-num">{{ summary.today_active }}</div><div class="stat-label">今日活跃</div></div>
+        <div class="stat"><div class="stat-num">{{ summary.visits }}</div><div class="stat-label">拜访次数</div></div>
+        <div class="stat"><div class="stat-num">{{ summary.customers }}</div><div class="stat-label">客户数</div></div>
+    </div>
+
+    {% set TNAME = {'morning':'🌅 早目标','evening':'🌙 晚总结','designer':'👔 设计师拜访','cross':'🏢 异业拜访','oldcustomer':'🤝 老顾客维护','moment':'📱 朋友圈','newlead':'🆕 新增意向','followup':'💬 跟进谈单'} %}
+
+    <div class="section-title">👥 本公司销售（{{ date }}）</div>
+    <table>
+        <thead><tr><th>姓名</th><th>今日分</th><th>累计分</th></tr></thead>
+        <tbody>
+            {% for m in members %}
+            <tr>
+                <td>{{ m.name }}{% if m.company %} <span style="color:#9CA3AF;font-size:12px;">· {{ m.company }}</span>{% endif %}</td>
+                <td><strong style="color:#0F766E;">{{ m.today }}</strong></td>
+                <td>{{ m.total }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" style="color:#9CA3AF;text-align:center;">本公司暂无销售成员</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="section-title">📋 拜访 / 打卡明细（{{ date }}）</div>
+    <table>
+        <thead><tr><th>销售</th><th>类型</th><th>客户</th><th>内容 / 定位</th><th>时间</th></tr></thead>
+        <tbody>
+            {% for r in records %}
+            <tr>
+                <td>{{ r.member_name }}</td>
+                <td><span class="badge">{{ TNAME.get(r.check_type, r.check_type) }}</span></td>
+                <td>{% if r.customer_name %}<span class="cust">👤 {{ r.customer_name }}</span>{% else %}<span style="color:#9CA3AF;">—</span>{% endif %}</td>
+                <td>
+                    {% if r.content %}{{ r.content }}{% endif %}
+                    {% if r.address %}<div style="color:#047857;font-size:12px;margin-top:4px;">📍 {{ r.address }}</div>{% endif %}
+                    {% if r.photo_path %}<img class="photo" src="/{{ r.photo_path }}" alt="照片">{% endif %}
+                </td>
+                <td style="white-space:nowrap;">{{ r.submitted_at }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="color:#9CA3AF;text-align:center;">当日暂无打卡记录</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="note">
+        · 本看板为<strong>只读</strong>，仅展示「{{ company }}」本公司数据，无法查看或修改其他公司。<br>
+        · 客户姓名与完整拜访明细仅对本公司老板与区域总代理后台可见；对外（公开榜单）仅展示姓名与积分，遵循信息保护原则。
+    </div>
+
+    <script>
+        // 实时掌握：每 20 秒自动刷新当前日期看板
+        setTimeout(function () { location.reload(); }, 20000);
+    </script>
+</body>
+</html>

@@ -108,6 +108,16 @@
     {% if msg %}<div style="margin:0 16px 12px;padding:10px 14px;border-radius:8px;background:#D1FAE5;color:#047857;font-size:13px;">✅ {{ msg }}</div>{% endif %}
     {% if error %}<div style="margin:0 16px 12px;padding:10px 14px;border-radius:8px;background:#FEE2E2;color:#B91C1C;font-size:13px;">⚠️ {{ error }}</div>{% endif %}
 
+    <form method="GET" action="/admin" style="padding:0 16px 8px;display:flex;gap:8px;align-items:center;">
+        <select name="company" onchange="this.form.submit()" style="padding:8px;border:1px solid #ccc;border-radius:8px;font-size:13px;max-width:240px;">
+            <option value="">全部公司</option>
+            {% for c in company_options %}
+            <option value="{{ c }}" {% if filter_company == c %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+        </select>
+        {% if filter_company %}<a href="/admin" style="font-size:13px;color:#6B7280;text-decoration:none;">清除筛选</a>{% endif %}
+    </form>
+
     <div class="section-title">
         <span>📋 成员进度</span>
         <span style="font-size:12px;color:#6B7280;">共 {{ rows|length }} 人</span>
@@ -118,6 +128,7 @@
             <tr>
                 <th>排名</th>
                 <th>姓名</th>
+                <th>公司</th>
                 <th>今日</th>
                 <th>累计</th>
                 <th>连续</th>
@@ -130,6 +141,7 @@
             <tr>
                 <td><strong>{{ loop.index }}</strong></td>
                 <td><a href="/admin/member/{{ r.id }}" class="name-link">{{ r.name }}</a></td>
+                <td>{{ r.company }}</td>
                 <td class="status-cell {% if r.today >= 6 %}status-ok{% elif r.today > 0 %}status-partial{% else %}status-empty{% endif %}">
                     {{ r.today }}分
                     {% if r.has_morning %}🌅{% endif %}{% if r.has_evening %}🌙{% endif %}
@@ -143,7 +155,7 @@
                     {% else %}<span class="badge badge-none">{{ r.award }}</span>{% endif %}
                 </td>
                 <td>
-                    <button class="row-btn" onclick="openModal({{ r.id }}, '{{ r.name }}', '{{ r.wechat_id or '' }}', '{{ r.phone or '' }}')">编辑</button>
+                    <button class="row-btn" onclick="openModal({{ r.id }}, '{{ r.name }}', '{{ r.company or '' }}', '{{ r.phone or '' }}')">编辑</button>
                     <button class="row-btn" onclick="openAdjust({{ r.id }}, '{{ r.name }}')">改分</button>
                     <button class="row-btn danger" onclick="delMember({{ r.id }}, '{{ r.name }}')">删除</button>
                 </td>
@@ -154,6 +166,38 @@
 
     <div style="padding:24px;text-align:center;color:#9CA3AF;font-size:12px;">
         点击姓名可查看该成员详细打卡记录
+    </div>
+
+    <div class="section-title">
+        <span>🏢 公司（经销商）管理 · 老板端密码</span>
+        <span style="font-size:12px;color:#6B7280;">共 {{ companies|length }} 家</span>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>公司名称</th>
+                <th>老板端密码</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in companies %}
+            <tr>
+                <td>{{ c.name }}</td>
+                <td>{% if c.boss_password %}已设置（{{ c.boss_password|length }} 位）{% else %}<span style="color:#9CA3AF;">未设置</span>{% endif %}</td>
+                <td>
+                    <form method="POST" action="/admin/company/edit" style="display:flex;gap:6px;">
+                        <input type="hidden" name="company_id" value="{{ c.id }}">
+                        <input name="boss_password" placeholder="设置/修改密码" style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;width:140px;">
+                        <button class="row-btn" type="submit">保存</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div style="padding:0 16px 24px;color:#9CA3AF;font-size:12px;">
+        老板端地址：/boss/login · 经销商选择本公司 + 输入此处密码即可只读查看本公司员工打卡与拜访明细
     </div>
 
     <div id="m" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99;align-items:center;justify-content:center;">

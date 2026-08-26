@@ -274,6 +274,10 @@
                     <label>说明（必填）</label>
                     <textarea name="content" required placeholder="例：拜访了X设计师，沟通了XX方案，约定周四再访"></textarea>
                 </div>
+                <div class="form-group" id="customer-group" style="display:none;">
+                    <label>客户姓名（必填）</label>
+                    <input type="text" name="customer_name" id="customer_name" placeholder="本次拜访的客户姓名">
+                </div>
                 <div class="form-group" id="photo-group">
                     <label>照片（必填）</label>
                     <label class="photo-input" id="photo-label">
@@ -291,14 +295,14 @@
 
     <script>
         const TYPE_LABELS = {
-            morning: { title: '🌅 早目标打卡', sub: '请写下今天要达成的目标', needPhoto: false },
-            evening: { title: '🌙 晚总结打卡', sub: '请写下今天的总结', needPhoto: false, deadline: '20:00' },
-            designer: { title: '👔 设计师拜访', sub: '请说明拜访对象与沟通要点', needPhoto: true },
-            cross: { title: '🏢 异业拜访', sub: '请说明渠道与对接内容', needPhoto: true },
-            oldcustomer: { title: '🤝 老顾客维护', sub: '回访/保养提醒/节日问候', needPhoto: true },
-            moment: { title: '📱 朋友圈发布', sub: '已发布的朋友圈内容简介', needPhoto: true },
-            newlead: { title: '🆕 新增意向客户', sub: '客户来源、需求、跟进计划', needPhoto: false },
-            followup: { title: '💬 顾客跟进谈单', sub: '跟单阶段、反馈记录', needPhoto: true },
+            morning: { title: '🌅 早目标打卡', sub: '请写下今天要达成的目标', needPhoto: false, needCustomer: false },
+            evening: { title: '🌙 晚总结打卡', sub: '请写下今天的总结', needPhoto: false, needCustomer: false, deadline: '20:00' },
+            designer: { title: '👔 设计师拜访', sub: '请说明拜访对象与沟通要点', needPhoto: true, needCustomer: true },
+            cross: { title: '🏢 异业拜访', sub: '请说明渠道与对接内容', needPhoto: true, needCustomer: true },
+            oldcustomer: { title: '🤝 老顾客维护', sub: '回访/保养提醒/节日问候', needPhoto: true, needCustomer: true },
+            moment: { title: '📱 朋友圈发布', sub: '已发布的朋友圈内容简介', needPhoto: true, needCustomer: true },
+            newlead: { title: '🆕 新增意向客户', sub: '客户来源、需求、跟进计划', needPhoto: false, needCustomer: true },
+            followup: { title: '💬 顾客跟进谈单', sub: '跟单阶段、反馈记录', needPhoto: true, needCustomer: true },
         };
 
         function openCheckin(type) {
@@ -312,6 +316,13 @@
                 document.getElementById('photo-input').removeAttribute('required');
             } else {
                 document.getElementById('photo-input').setAttribute('required', 'required');
+            }
+            const customerGroup = document.getElementById('customer-group');
+            customerGroup.style.display = cfg.needCustomer ? 'block' : 'none';
+            if (!cfg.needCustomer) {
+                document.getElementById('customer_name').removeAttribute('required');
+            } else {
+                document.getElementById('customer_name').setAttribute('required', 'required');
             }
             document.getElementById('modal').classList.add('show');
         }

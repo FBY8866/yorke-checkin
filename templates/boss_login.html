@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>老板端登录 - 约克超级品牌日打卡系统</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #0F766E 0%, #14B8A6 100%);
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: white; border-radius: 16px; padding: 32px 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2); max-width: 400px; width: 100%;
+        }
+        h1 { color: #0F766E; font-size: 22px; margin-bottom: 8px; text-align: center; }
+        .subtitle { color: #6B7280; font-size: 13px; text-align: center; margin-bottom: 24px; }
+        label { display: block; color: #374151; font-size: 14px; margin-bottom: 6px; margin-top: 14px; font-weight: 500; }
+        select, input[type="password"] {
+            width: 100%; padding: 12px 14px; border: 1.5px solid #E5E7EB; border-radius: 8px;
+            font-size: 16px; background: white;
+        }
+        select:focus, input:focus { outline: none; border-color: #14B8A6; }
+        .btn {
+            width: 100%; padding: 14px; background: #0F766E; color: white;
+            border: none; border-radius: 8px; font-size: 16px; font-weight: 600;
+            margin-top: 24px; cursor: pointer;
+        }
+        .btn:hover { background: #115E59; }
+        .error { color: #DC2626; font-size: 13px; margin-top: 12px; text-align: center; }
+        .hint { color: #9CA3AF; font-size: 12px; margin-top: 16px; text-align: center; }
+        .hint a { color: #0F766E; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>经销商老板端</h1>
+        <div class="subtitle">查看本公司员工每日打卡与拜访</div>
+
+        {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+        <form method="POST" action="/boss/login">
+            <label>选择公司</label>
+            <select name="company" required>
+                <option value="">请选择您的公司</option>
+                {% for c in companies %}
+                <option value="{{ c }}">{{ c }}</option>
+                {% endfor %}
+            </select>
+
+            <label>管理密码</label>
+            <input type="password" name="password" required placeholder="请输入老板端管理密码">
+
+            <button type="submit" class="btn">进入看板</button>
+        </form>
+
+        <div class="hint"><a href="/">← 返回员工打卡端</a></div>
+    </div>
+</body>
+</html>

@@ -166,8 +166,54 @@ def init_db():
         if col not in existing_cols:
             cur.execute(f'ALTER TABLE checkins ADD COLUMN {col} {col_type}')
 
+    # 迁移：成员增加公司字段
+    cur.execute('PRAGMA table_info(members)')
+    mcols = {r[1] for r in cur.fetchall()}
+    if 'company' not in mcols:
+        cur.execute('ALTER TABLE members ADD COLUMN company TEXT')
+
+    # 迁移：打卡增加客户姓名字段（仅拜访类录入）
+    cur.execute('PRAGMA table_info(checkins)')
+    ccols = {r[1] for r in cur.fetchall()}
+    if 'customer_name' not in ccols:
+        cur.execute('ALTER TABLE checkins ADD COLUMN customer_name TEXT')
+
+    # 公司（经销商）表：老板端独立密码，终端后台可改
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS companies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            boss_password TEXT
+        )
+    ''')
+    # 种子 27 家经销商（INSERT OR IGNORE 保证幂等，已改过的密码不会被覆盖）
+    for cname in DEALER_COMPANIES:
+        cur.execute('INSERT OR IGNORE INTO companies (name, boss_password) VALUES (?, ?)',
+                    (cname, DEFAULT_COMPANY_PASSWORD))
+
+    # 一次性清空历史演示数据（傅兵宇等旧成员），仅首次启动执行，之后重启不再清空
+    cur.execute("SELECT value FROM activity_config WHERE key='wiped_v2'")
+    _w = cur.fetchone()
+    if not _w or _w[0] != '1':
+        cur.execute('DELETE FROM score_adjustments')
+        cur.execute('DELETE FROM violations')
+        cur.execute('DELETE FROM appeals')
+        cur.execute('DELETE FROM checkins')
+        cur.execute('DELETE FROM members')
+        cur.execute("INSERT OR REPLACE INTO activity_config (key, value) VALUES ('wiped_v2','1')")
+
     conn.commit()
     conn.close()
+
+
+def get_companies():
+    """返回所有经销商公司名（按 id 顺序），供登录/老板端下拉使用"""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT name FROM companies ORDER BY id')
+    names = [r[0] for r in cur.fetchall()]
+    conn.close()
+    return names
 
 
 # ============ 评分规则配置 ============
@@ -185,6 +231,40 @@ OPTIONAL_TOTAL_CAP = 6  # 选做项当日总分封顶
 REQUIRED_TYPES = ('morning', 'evening')
 MORNING_POINTS = 1
 EVENING_POINTS = 1
+
+# ============ 公司与权限配置 ============
+# 经销商（老板端）默认密码，终端后台(/admin)可逐家修改
+DEFAULT_COMPANY_PASSWORD = 'yk2026'
+# 27 家经销商公司名单（来自区域总代理下发，作为下拉选项与数据隔离边界）
+DEALER_COMPANIES = [
+    '缙云县壶镇镇名锐家电经营部',
+    '金华吉佳环境科技有限公司',
+    '缙云县新铭暖通设备店',
+    '丽水市锐鹏电器有限公司',
+    '龙泉市约克家电经营部',
+    '青田博宏电器店',
+    '遂昌利安暖通商行',
+    '武义佳源节能设备有限公司',
+    '永康市沁心暖通设备有限公司',
+    '永康市世通家电有限公司',
+    '常山鑫雷制冷设备商行',
+    '开化瑞兴新能源科技有限公司',
+    '兰溪市越顺暖通器材商行',
+    '衢州市皇诚暖通设备有限公司',
+    '江山市诚宏节能环境科技有限公司',
+    '龙游胜辉节能设备有限公司',
+    '东阳恒峰暖通设备有限公司',
+    '东阳市琦瑞成套设备有限公司',
+    '东阳市横店飞军家用电器商行',
+    '浦江县周道建材有限公司',
+    '义乌市鸿森暖通设备有限公司',
+    '义乌尚裕电器有限公司',
+    '金华斯派客暖通设备有限公司',
+    '义乌鼎尚暖通设备有限公司',
+    '义乌新灵瑞暖通设备有限公司',
+    '义乌市新誉环境设备有限公司',
+    '金华市家祥暖通设备有限公司',
+]
 
 
 def compute_day_points(member_id, check_date):
@@ -351,23 +431,23 @@ def index():
     is_admin = session.get('is_admin', False)
     if member_id:
         return redirect(url_for('home'))
-    return render_template('login.html')
+    return render_template('login.html', companies=get_companies())
 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
-        wechat_id = request.form.get('wechat_id', '').strip()
+        company = request.form.get('company', '').strip()
         phone = request.form.get('phone', '').strip()
         admin_code = request.form.get('admin_code', '').strip()
 
         if not name:
-            return render_template('login.html', error='请输入姓名')
+            return render_template('login.html', error='请输入姓名', companies=get_companies())
 
         conn = get_db()
         cur = conn.cursor()
-        # 检查是否是管理员
+        # 检查是否是管理员（终端后台，全量可改）
         is_admin = (admin_code == 'yorke2026')
 
         if is_admin:
@@ -383,9 +463,9 @@ def login():
             # 创建管理员
             uid = f"admin-{uuid.uuid4().hex[:8]}"
             cur.execute('''
-                INSERT INTO members (uid, name, wechat_id, phone, is_admin)
+                INSERT INTO members (uid, name, company, phone, is_admin)
                 VALUES (?, ?, ?, ?, 1)
-            ''', (uid, name, wechat_id, phone))
+            ''', (uid, name, company, phone))
             conn.commit()
             member_id = cur.lastrowid
             session['member_id'] = member_id
@@ -394,16 +474,13 @@ def login():
             conn.close()
             return redirect(url_for('admin_dashboard'))
         else:
-            # 成员登录：仅按「姓名」识别同一用户，避免换设备/填错公司名称导致账号分裂、积分分散
-            cur.execute('SELECT * FROM members WHERE name = ? AND is_admin = 0 AND is_active = 1', (name,))
+            # 成员登录：按「公司 + 姓名」识别同一用户，避免不同公司重名导致账号分裂、跨公司串数据
+            cur.execute('SELECT * FROM members WHERE company = ? AND name = ? AND is_admin = 0 AND is_active = 1', (company, name))
             existing = cur.fetchone()
             if existing:
-                # 同步最新填写的公司名称/手机号（仅作资料，不参与匹配）
-                if wechat_id or phone:
-                    cur.execute(
-                        'UPDATE members SET wechat_id = COALESCE(NULLIF(?, ""), wechat_id), '
-                        'phone = COALESCE(NULLIF(?, ""), phone) WHERE id = ?',
-                        (wechat_id, phone, existing['id']))
+                if phone:
+                    cur.execute('UPDATE members SET phone = COALESCE(NULLIF(?, ""), phone) WHERE id = ?',
+                                (phone, existing['id']))
                     conn.commit()
                 session['member_id'] = existing['id']
                 session['member_name'] = existing['name']
@@ -411,12 +488,17 @@ def login():
                 conn.close()
                 return redirect(url_for('home'))
 
+            # 公司必须来自下拉名单（companies 表），防止乱填
+            cur.execute('SELECT 1 FROM companies WHERE name = ?', (company,))
+            if not cur.fetchone():
+                conn.close()
+                return render_template('login.html', error='请在下拉列表中选择有效的公司', companies=get_companies())
             # 创建新成员
             uid = f"m-{uuid.uuid4().hex[:8]}"
             cur.execute('''
-                INSERT INTO members (uid, name, wechat_id, phone, is_admin)
+                INSERT INTO members (uid, name, company, phone, is_admin)
                 VALUES (?, ?, ?, ?, 0)
-            ''', (uid, name, wechat_id, phone))
+            ''', (uid, name, company, phone))
             conn.commit()
             member_id = cur.lastrowid
             session['member_id'] = member_id
@@ -425,7 +507,7 @@ def login():
             conn.close()
             return redirect(url_for('home'))
 
-    return render_template('login.html')
+    return render_template('login.html', companies=get_companies())
 
 
 @app.route('/logout')
@@ -497,6 +579,7 @@ def api_checkin():
     member_id = session['member_id']
     check_type = request.form.get('check_type', '')
     content = request.form.get('content', '').strip()
+    customer_name = request.form.get('customer_name', '').strip()
     photo = request.files.get('photo')
 
     # 定位信息（前端 geolocation 传入，可选）
@@ -542,6 +625,8 @@ def api_checkin():
             return jsonify({'ok': False, 'error': '选做项必须上传照片'}), 400
         if not content:
             return jsonify({'ok': False, 'error': '请填写说明文字'}), 400
+        if not customer_name:
+            return jsonify({'ok': False, 'error': '请填写客户姓名'}), 400
 
     # 必做项要求内容
     if check_type in required_types and not content:
@@ -565,9 +650,9 @@ def api_checkin():
     conn = get_db()
     cur = conn.cursor()
     cur.execute('''
-        INSERT INTO checkins (member_id, check_date, check_type, content, photo_path, lat, lng, address)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (member_id, today, check_type, content, photo_path, lat, lng, address))
+        INSERT INTO checkins (member_id, check_date, check_type, content, photo_path, lat, lng, address, customer_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (member_id, today, check_type, content, photo_path, lat, lng, address, customer_name))
     conn.commit()
 
     # 重新计算当日分
@@ -665,6 +750,7 @@ def admin_dashboard():
 
     msg = request.args.get('msg')
     error = request.args.get('error')
+    filter_company = request.args.get('company', '').strip()
 
     conn = get_db()
     cur = conn.cursor()
@@ -683,8 +769,11 @@ def admin_dashboard():
     cur.execute('SELECT COUNT(*) FROM checkins WHERE check_date = ? AND check_type = ?', (today, 'evening'))
     evening_count = cur.fetchone()[0]
 
-    # 全部成员 + 累计分
-    cur.execute('SELECT id, name, wechat_id, phone, joined_at FROM members WHERE is_admin = 0 AND is_active = 1 ORDER BY id')
+    # 全部成员 + 累计分（可按公司筛选）
+    if filter_company:
+        cur.execute('SELECT id, name, company, phone, joined_at FROM members WHERE is_admin = 0 AND is_active = 1 AND company = ? ORDER BY id', (filter_company,))
+    else:
+        cur.execute('SELECT id, name, company, phone, joined_at FROM members WHERE is_admin = 0 AND is_active = 1 ORDER BY id')
     members = [dict(r) for r in cur.fetchall()]
 
     rows = []
@@ -716,6 +805,7 @@ def admin_dashboard():
         rows.append({
             'id': m['id'],
             'name': m['name'],
+            'company': m['company'] or '未分配',
             'total': total,
             'streak': streak,
             'today': today_result['total'],
@@ -736,6 +826,10 @@ def admin_dashboard():
         else:
             r['award'] = '-'
 
+    # 公司（经销商）管理列表
+    cur.execute('SELECT id, name, boss_password FROM companies ORDER BY id')
+    companies_mgmt = [dict(r) for r in cur.fetchall()]
+
     conn.close()
     return render_template('admin.html',
                            name=session['member_name'],
@@ -745,6 +839,9 @@ def admin_dashboard():
                            evening_count=evening_count,
                            rows=rows,
                            today=today,
+                           companies=companies_mgmt,
+                           company_options=get_companies(),
+                           filter_company=filter_company,
                            msg=msg,
                            error=error)
 
@@ -783,14 +880,14 @@ def admin_member_add():
         return redirect(url_for('admin_dashboard', error='请输入姓名'))
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('SELECT id FROM members WHERE name=? AND wechat_id=? AND is_admin=0 AND is_active=1',
+    cur.execute('SELECT id FROM members WHERE name=? AND company=? AND is_admin=0 AND is_active=1',
                 (name, company))
     if cur.fetchone():
         conn.close()
         return redirect(url_for('admin_dashboard', error='该成员已存在（同名同公司）'))
     uid = f"m-{uuid.uuid4().hex[:8]}"
     cur.execute(
-        'INSERT INTO members (uid, name, wechat_id, phone, is_admin) VALUES (?, ?, ?, ?, 0)',
+        'INSERT INTO members (uid, name, company, phone, is_admin) VALUES (?, ?, ?, ?, 0)',
         (uid, name, company, phone))
     conn.commit()
     conn.close()
@@ -822,7 +919,7 @@ def admin_member_edit(member_id):
         return redirect(url_for('admin_member_detail', member_id=member_id, error='姓名不能为空'))
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('UPDATE members SET name=?, wechat_id=?, phone=? WHERE id=? AND is_admin=0',
+    cur.execute('UPDATE members SET name=?, company=?, phone=? WHERE id=? AND is_admin=0',
                 (name, company, phone, member_id))
     conn.commit()
     conn.close()
@@ -849,6 +946,97 @@ def admin_member_adjust(member_id):
     conn.close()
     return redirect(url_for('admin_member_detail', member_id=member_id,
                             msg=('已加' if points > 0 else '已减') + '分 ' + str(abs(points))))
+
+
+@app.route('/admin/company/edit', methods=['POST'])
+def admin_company_edit():
+    """终端后台修改某经销商老板端密码"""
+    if not session.get('is_admin'):
+        return redirect(url_for('index'))
+    cid = request.form.get('company_id', '').strip()
+    pw = request.form.get('boss_password', '').strip()
+    if not cid or not pw:
+        return redirect(url_for('admin_dashboard', error='公司与密码均不能为空'))
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('UPDATE companies SET boss_password = ? WHERE id = ?', (pw, cid))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_dashboard', msg='已更新该公司老板端密码'))
+
+
+# ============ 老板端（经销商，只读、仅本公司） ============
+
+@app.route('/boss/login', methods=['GET', 'POST'])
+def boss_login():
+    if request.method == 'POST':
+        company = request.form.get('company', '').strip()
+        pw = request.form.get('password', '').strip()
+        if not company or not pw:
+            return render_template('boss_login.html', error='请选择公司并输入密码', companies=get_companies())
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM companies WHERE name = ?', (company,))
+        row = cur.fetchone()
+        conn.close()
+        if not row or row['boss_password'] != pw:
+            return render_template('boss_login.html', error='公司或密码错误', companies=get_companies())
+        session['boss_company'] = company
+        session['is_boss'] = True
+        return redirect(url_for('boss_dashboard'))
+    return render_template('boss_login.html', companies=get_companies())
+
+
+@app.route('/boss/dashboard')
+def boss_dashboard():
+    if not session.get('is_boss'):
+        return redirect(url_for('boss_login'))
+    company = session['boss_company']
+    date = request.args.get('date', now_cst().strftime('%Y-%m-%d')).strip()
+
+    conn = get_db()
+    cur = conn.cursor()
+    # 本公司销售名单
+    cur.execute('SELECT id, name, company FROM members WHERE company = ? AND is_admin = 0 AND is_active = 1 ORDER BY name', (company,))
+    members = [dict(r) for r in cur.fetchall()]
+    mids = [m['id'] for m in members]
+
+    summary = {'total_members': len(members), 'today_active': 0, 'visits': 0, 'customers': 0}
+    records = []
+    if mids:
+        ph = ','.join('?' * len(mids))
+        cur.execute(f'SELECT COUNT(DISTINCT member_id) FROM checkins WHERE member_id IN ({ph}) AND check_date = ? AND is_valid = 1', mids + [date])
+        summary['today_active'] = cur.fetchone()[0]
+        cur.execute(f'''SELECT m.name AS member_name, c.check_type, c.customer_name, c.content,
+                       c.address, c.photo_path, c.submitted_at, c.points
+                       FROM checkins c JOIN members m ON c.member_id = m.id
+                       WHERE c.member_id IN ({ph}) AND c.check_date = ? AND c.is_valid = 1
+                       ORDER BY c.submitted_at ASC''', mids + [date])
+        records = [dict(r) for r in cur.fetchall()]
+        cur.execute(f'''SELECT COUNT(*) FROM checkins WHERE member_id IN ({ph}) AND check_date = ?
+                       AND is_valid = 1 AND check_type NOT IN ('morning','evening')''', mids + [date])
+        summary['visits'] = cur.fetchone()[0]
+        cur.execute(f'''SELECT COUNT(DISTINCT customer_name) FROM checkins WHERE member_id IN ({ph})
+                       AND check_date = ? AND is_valid = 1 AND customer_name IS NOT NULL AND customer_name != '' ''', mids + [date])
+        summary['customers'] = cur.fetchone()[0]
+
+    # 各销售累计分
+    for m in members:
+        cur2 = conn.cursor()
+        cur2.execute('SELECT DISTINCT check_date FROM checkins WHERE member_id = ? AND is_valid = 1', (m['id'],))
+        dates = [r[0] for r in cur2.fetchall()]
+        total = 0
+        for d in dates:
+            total += compute_day_points(m['id'], d)['total']
+        total += get_adjustment_total(m['id'])
+        m['total'] = total
+        m['today'] = compute_day_points(m['id'], date)['total']
+
+    conn.close()
+    return render_template('boss_dashboard.html',
+                           company=company, date=date, members=members,
+                           records=records, summary=summary,
+                           today=now_cst().strftime('%Y-%m-%d'))
 
 
 @app.route('/admin/leaderboard_image')

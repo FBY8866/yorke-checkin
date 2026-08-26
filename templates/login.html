@@ -24,6 +24,8 @@
             font-size: 16px; transition: border-color 0.2s;
         }
         input:focus { outline: none; border-color: #3B82F6; }
+        select { width: 100%; padding: 12px 14px; border: 1.5px solid #E5E7EB; border-radius: 8px; font-size: 16px; background: white; }
+        select:focus { outline: none; border-color: #3B82F6; }
         .row-toggle { color: #3B82F6; font-size: 13px; margin-top: 16px; text-align: center; cursor: pointer; }
         .row-toggle:hover { text-decoration: underline; }
         .btn {
@@ -46,12 +48,17 @@
         {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
         <form method="POST" action="/login">
+            <label>公司（必选）</label>
+            <select name="company" required>
+                <option value="">请选择您所在的公司</option>
+                {% for c in companies %}
+                <option value="{{ c }}">{{ c }}</option>
+                {% endfor %}
+            </select>
+            <div class="hint">⚠️ 系统按「公司 + 姓名」识别您的账号，请选对公司，避免与其他公司重名导致积分串数据</div>
+
             <label>姓名</label>
             <input type="text" name="name" required placeholder="请输入您的真实姓名">
-
-            <label>公司名称（选填，仅作资料）</label>
-            <input type="text" name="wechat_id" placeholder="您的公司名称">
-            <div class="hint">⚠️ 系统按「姓名」识别您的账号，请每次填写相同姓名，避免重复账号导致积分分散</div>
 
             <label>手机号（选填）</label>
             <input type="tel" name="phone" placeholder="便于申诉联系">
@@ -63,11 +70,14 @@
             <div class="admin-section">
                 <label>管理员邀请码</label>
                 <input type="text" name="admin_code" placeholder="管理员请输入邀请码">
-                <div class="hint">仅群主/管理员可登录后台</div>
+                <div class="hint">仅区域总代理/管理员可登录后台</div>
             </div>
 
             <button type="submit" class="btn">进入打卡系统</button>
         </form>
+        <div style="text-align:center;margin-top:14px;">
+            <a href="/boss/login" style="color:#3B82F6;font-size:13px;text-decoration:none;">我是经销商老板 · 查看本公司员工 →</a>
+        </div>
     </div>
 </body>
 </html>

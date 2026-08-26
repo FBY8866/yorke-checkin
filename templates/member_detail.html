@@ -42,7 +42,7 @@
     <a href="/admin" class="back-link">← 返回后台</a>
     <div class="header">
         <h1>👤 {{ member.name }}</h1>
-        <p>公司名称：{{ member.wechat_id or '未填' }} · 加入：{{ member.joined_at }}</p>
+        <p>公司名称：{{ member.company or '未填' }} · 加入：{{ member.joined_at }}</p>
     </div>
     {% if msg %}<div style="margin:12px 16px 0;padding:10px 14px;border-radius:8px;background:#D1FAE5;color:#047857;font-size:13px;">✅ {{ msg }}</div>{% endif %}
     {% if error %}<div style="margin:12px 16px 0;padding:10px 14px;border-radius:8px;background:#FEE2E2;color:#B91C1C;font-size:13px;">⚠️ {{ error }}</div>{% endif %}
@@ -51,7 +51,7 @@
             <div style="font-weight:600;color:#374151;margin-bottom:10px;">管理操作</div>
             <form method="POST" action="/admin/member/{{ member.id }}/edit" style="margin-bottom:10px;">
                 <input name="name" value="{{ member.name or '' }}" placeholder="姓名 *" required style="width:100%;padding:8px;margin-bottom:6px;border:1px solid #ccc;border-radius:8px;">
-                <input name="company" value="{{ member.wechat_id or '' }}" placeholder="公司名称" style="width:100%;padding:8px;margin-bottom:6px;border:1px solid #ccc;border-radius:8px;">
+                <input name="company" value="{{ member.company or '' }}" placeholder="公司名称" style="width:100%;padding:8px;margin-bottom:6px;border:1px solid #ccc;border-radius:8px;">
                 <input name="phone" value="{{ member.phone or '' }}" placeholder="手机号" style="width:100%;padding:8px;margin-bottom:6px;border:1px solid #ccc;border-radius:8px;">
                 <button style="width:100%;padding:8px;border:none;border-radius:8px;background:#1E40AF;color:white;font-weight:600;cursor:pointer;">保存资料</button>
             </form>
@@ -85,6 +85,7 @@
                 </span>
                 <span class="record-date">{{ r.check_date }} · {{ r.submitted_at }}</span>
             </div>
+            {% if r.customer_name %}<div class="record-content" style="color:#B45309;">👤 客户：{{ r.customer_name }}</div>{% endif %}
             <div class="record-content">{{ r.content }}</div>
             {% if r.photo_path %}
             <img class="record-photo" src="/{{ r.photo_path }}" alt="打卡照片">
