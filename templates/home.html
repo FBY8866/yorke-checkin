@@ -59,6 +59,7 @@
         .nav-bar {
             position: fixed; bottom: 0; left: 0; right: 0;
             background: white; display: flex; padding: 8px 0 16px;
+            padding-bottom: calc(16px + env(safe-area-inset-bottom));
             border-top: 1px solid #E5E7EB; z-index: 10;
         }
         .nav-item {
@@ -217,7 +218,7 @@
             <div class="icon ic-optional">🆕</div>
             <div class="info">
                 <div class="info-title">新增意向客户</div>
-                <div class="info-sub">登记新增意向客户（姓名+预计地址）</div>
+                <div class="info-sub">登记新增意向客户（姓名+工地地址）</div>
             </div>
             <div class="points">+1·封顶2</div>
         </div>
@@ -268,9 +269,9 @@
         <div class="nav-item" onclick="location.href='/leaderboard'">
             <span class="nav-icon">🏆</span>看榜单
         </div>
-        <div class="nav-item" onclick="if(confirm('确定退出登录？')) location.href='/logout'">
+        <a class="nav-item" href="/logout" style="text-decoration:none;color:inherit;cursor:pointer;">
             <span class="nav-icon">🚪</span>退出
-        </div>
+        </a>
     </div>
 
     <div id="modal" class="modal-overlay">
@@ -343,7 +344,7 @@
             cross: { title: '🏢 异业拜访', sub: '拜访异业门店/合伙人，拓展合作渠道', contentPlaceholder: '如：与 XX 建材店洽谈联名/互推', needPhoto: true, needCustomer: true, needContent: true },
             oldcustomer: { title: '🤝 老顾客维护', sub: '回访老客户，维护客情与转介绍', contentPlaceholder: '如：回访 XX 客户，邀约到店/促成转介绍', needPhoto: true, needCustomer: true, needContent: true },
             moment: { title: '📱 朋友圈发布', sub: '发布朋友圈宣传，展示活动与案例', contentPlaceholder: '如：发布活动海报+门店实拍文案', needPhoto: true, needCustomer: false, needContent: true },
-            newlead: { title: '🆕 新增意向客户', sub: '登记新增意向客户（姓名+预计地址）', needPhoto: false, needCustomer: true, needContent: false, customerLabel: '姓名预计地址' },
+            newlead: { title: '🆕 新增意向客户', sub: '登记新增意向客户（姓名+工地地址）', needPhoto: false, needCustomer: true, needContent: false, customerLabel: '姓名+工地地址' },
             followup: { title: '💬 顾客跟进谈单', sub: '跟进意向客户，推动谈单成交', contentPlaceholder: '如：与 XX 客户敲定报价/签约进度', needPhoto: true, needCustomer: true, needContent: true },
         };
 
@@ -374,7 +375,7 @@
             contentInput.placeholder = cfg.contentPlaceholder || '请按打卡规则填写说明';
             if (!cfg.needContent) contentInput.removeAttribute('required');
             else contentInput.setAttribute('required', 'required');
-            // 客户姓名 / 姓名预计地址
+            // 客户姓名 = 姓名+工地地址（newlead 专用）
             const customerGroup = document.getElementById('customer-group');
             customerGroup.style.display = cfg.needCustomer ? 'block' : 'none';
             if (!cfg.needCustomer) document.getElementById('customer_name').removeAttribute('required');
