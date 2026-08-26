@@ -162,7 +162,7 @@
             <div class="icon {% if today.has_morning %}ic-done{% else %}ic-morning{% endif %}">{% if today.has_morning %}✓{% else %}🌅{% endif %}</div>
             <div class="info">
                 <div class="info-title">今日目标打卡</div>
-                <div class="info-sub">写下今日目标（10:00 后不可修改）</div>
+                <div class="info-sub">10:00 前提交当日目标</div>
             </div>
             <div class="points"><span class="points-num">+1</span> 分</div>
         </div>
@@ -185,7 +185,7 @@
             <div class="icon ic-optional">👔</div>
             <div class="info">
                 <div class="info-title">设计师拜访</div>
-                <div class="info-sub">都是不一定的，根据规则来修改</div>
+                <div class="info-sub">拜访设计师/设计公司，当面沟通方案并留资</div>
             </div>
             <div class="points">+1·封顶2</div>
         </div>
@@ -193,7 +193,7 @@
             <div class="icon ic-optional">🏢</div>
             <div class="info">
                 <div class="info-title">异业拜访</div>
-                <div class="info-sub">都是不一定的，根据规则来修改</div>
+                <div class="info-sub">拜访异业门店/合伙人，拓展合作渠道</div>
             </div>
             <div class="points">+1·封顶2</div>
         </div>
@@ -201,7 +201,7 @@
             <div class="icon ic-optional">🤝</div>
             <div class="info">
                 <div class="info-title">老顾客维护</div>
-                <div class="info-sub">都是不一定的，根据规则来修改</div>
+                <div class="info-sub">回访老客户，维护客情与转介绍</div>
             </div>
             <div class="points">+1·封顶1</div>
         </div>
@@ -209,7 +209,7 @@
             <div class="icon ic-optional">📱</div>
             <div class="info">
                 <div class="info-title">朋友圈发布</div>
-                <div class="info-sub">都是不一定的，根据规则来修改</div>
+                <div class="info-sub">发布朋友圈宣传，展示活动与案例</div>
             </div>
             <div class="points">+1·封顶1</div>
         </div>
@@ -217,7 +217,7 @@
             <div class="icon ic-optional">🆕</div>
             <div class="info">
                 <div class="info-title">新增意向客户</div>
-                <div class="info-sub">都是不一定的，根据规则来修改</div>
+                <div class="info-sub">登记新增意向客户（姓名+预计地址）</div>
             </div>
             <div class="points">+1·封顶2</div>
         </div>
@@ -225,7 +225,7 @@
             <div class="icon ic-optional">💬</div>
             <div class="info">
                 <div class="info-title">顾客跟进谈单</div>
-                <div class="info-sub">都是不一定的，根据规则来修改</div>
+                <div class="info-sub">跟进意向客户，推动谈单成交</div>
             </div>
             <div class="points">+1·封顶2</div>
         </div>
@@ -283,7 +283,7 @@
                 <input type="hidden" name="lng" id="lng">
                 <div class="form-group" id="content-group">
                     <label id="content-label">说明</label>
-                    <textarea name="content" id="content-input" placeholder="都是不一定的，根据规则来修改"></textarea>
+                    <textarea name="content" id="content-input" placeholder="请按打卡规则填写说明"></textarea>
                 </div>
                 <div class="form-group" id="customer-group" style="display:none;">
                     <label id="customer-label">客户姓名（必填）</label>
@@ -314,7 +314,7 @@
                 <input type="hidden" name="lng" id="edit-lng">
                 <div class="form-group" id="edit-content-group">
                     <label>说明</label>
-                    <textarea name="content" id="edit-content" placeholder="都是不一定的，根据规则来修改"></textarea>
+                    <textarea name="content" id="edit-content" placeholder="请按打卡规则填写说明"></textarea>
                 </div>
                 <div class="form-group" id="edit-customer-group" style="display:none;">
                     <label id="edit-customer-label">客户姓名</label>
@@ -337,18 +337,28 @@
 
     <script>
         const TYPE_LABELS = {
-            morning: { title: '🌅 今日目标打卡', sub: '写下今日目标', needPhoto: false, needCustomer: false, needContent: true },
+            morning: { title: '🌅 今日目标打卡', sub: '10:00 前提交当日目标', needPhoto: false, needCustomer: false, needContent: true },
             evening: { title: '🌙 今日总结打卡', sub: '写下今日总结', needPhoto: false, needCustomer: false, needContent: true, deadline: '20:00' },
-            designer: { title: '👔 设计师拜访', sub: '都是不一定的，根据规则来修改', needPhoto: true, needCustomer: true, needContent: true },
-            cross: { title: '🏢 异业拜访', sub: '都是不一定的，根据规则来修改', needPhoto: true, needCustomer: true, needContent: true },
-            oldcustomer: { title: '🤝 老顾客维护', sub: '都是不一定的，根据规则来修改', needPhoto: true, needCustomer: true, needContent: true },
-            moment: { title: '📱 朋友圈发布', sub: '都是不一定的，根据规则来修改', needPhoto: true, needCustomer: false, needContent: true },
-            newlead: { title: '🆕 新增意向客户', sub: '都是不一定的，根据规则来修改', needPhoto: false, needCustomer: true, needContent: false, customerLabel: '姓名预计地址' },
-            followup: { title: '💬 顾客跟进谈单', sub: '都是不一定的，根据规则来修改', needPhoto: true, needCustomer: true, needContent: true },
+            designer: { title: '👔 设计师拜访', sub: '拜访设计师/设计公司，当面沟通方案并留资', contentPlaceholder: '如：与 XX 设计师沟通 XX 方案、约定量尺', needPhoto: true, needCustomer: true, needContent: true },
+            cross: { title: '🏢 异业拜访', sub: '拜访异业门店/合伙人，拓展合作渠道', contentPlaceholder: '如：与 XX 建材店洽谈联名/互推', needPhoto: true, needCustomer: true, needContent: true },
+            oldcustomer: { title: '🤝 老顾客维护', sub: '回访老客户，维护客情与转介绍', contentPlaceholder: '如：回访 XX 客户，邀约到店/促成转介绍', needPhoto: true, needCustomer: true, needContent: true },
+            moment: { title: '📱 朋友圈发布', sub: '发布朋友圈宣传，展示活动与案例', contentPlaceholder: '如：发布活动海报+门店实拍文案', needPhoto: true, needCustomer: false, needContent: true },
+            newlead: { title: '🆕 新增意向客户', sub: '登记新增意向客户（姓名+预计地址）', needPhoto: false, needCustomer: true, needContent: false, customerLabel: '姓名预计地址' },
+            followup: { title: '💬 顾客跟进谈单', sub: '跟进意向客户，推动谈单成交', contentPlaceholder: '如：与 XX 客户敲定报价/签约进度', needPhoto: true, needCustomer: true, needContent: true },
         };
+
+        const HAS_MORNING = {{ today.has_morning|tojson }};
 
         function openCheckin(type) {
             const cfg = TYPE_LABELS[type];
+            // 今日目标 10:00 后禁止补打（服务端为准，这里做前端友好拦截）
+            if (type === 'morning' && !HAS_MORNING) {
+                const now = new Date();
+                if (now.getHours() * 60 + now.getMinutes() >= 600) {
+                    showToast('今日目标需在 10:00 前提交，已截止', true);
+                    return;
+                }
+            }
             document.getElementById('modal-title').textContent = cfg.title;
             document.getElementById('modal-sub').textContent = cfg.sub;
             document.getElementById('check_type').value = type;
@@ -360,8 +370,10 @@
             // 说明
             const contentGroup = document.getElementById('content-group');
             contentGroup.style.display = cfg.needContent ? 'block' : 'none';
-            if (!cfg.needContent) document.getElementById('content-input').removeAttribute('required');
-            else document.getElementById('content-input').setAttribute('required', 'required');
+            const contentInput = document.getElementById('content-input');
+            contentInput.placeholder = cfg.contentPlaceholder || '请按打卡规则填写说明';
+            if (!cfg.needContent) contentInput.removeAttribute('required');
+            else contentInput.setAttribute('required', 'required');
             // 客户姓名 / 姓名预计地址
             const customerGroup = document.getElementById('customer-group');
             customerGroup.style.display = cfg.needCustomer ? 'block' : 'none';
@@ -463,6 +475,7 @@
             const cg = document.getElementById('edit-content-group');
             cg.style.display = cfg.needContent ? 'block' : 'none';
             document.getElementById('edit-content').value = content || '';
+            document.getElementById('edit-content').placeholder = cfg.contentPlaceholder || '请按打卡规则填写说明';
             // 客户姓名
             const cug = document.getElementById('edit-customer-group');
             cug.style.display = cfg.needCustomer ? 'block' : 'none';
