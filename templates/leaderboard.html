@@ -39,6 +39,7 @@
         .rank.silver { background: #F3F4F6; color: #4B5563; }
         .rank.bronze { background: #FED7AA; color: #9A3412; }
         .name { flex: 1; font-size: 15px; color: #111827; font-weight: 500; }
+        .name .company { display: block; font-size: 11px; color: #6B7280; font-weight: 400; margin-top: 2px; }
         .score { font-size: 22px; color: #1E40AF; font-weight: 700; }
         .empty { text-align: center; color: #9CA3AF; padding: 40px 20px; }
         .tabs { display: flex; background: white; position: sticky; top: 0; z-index: 5; border-bottom: 1px solid #E5E7EB; }
@@ -65,14 +66,17 @@
         <div id="panel-today">
             <div class="panel-title" id="today-title">今日日榜</div>
             <div id="today-list"><div class="empty">加载中...</div></div>
+            <div style="text-align:center;padding:14px 0 4px;color:#9CA3AF;font-size:12px;">
+                日榜前 5 名，每人奖励 8.8 元
+            </div>
         </div>
         <!-- 累计总榜 -->
         <div id="panel-total" style="display:none;">
             <div class="panel-title" id="total-title">累计总榜</div>
             <div id="total-list"><div class="empty">加载中...</div></div>
-        </div>
-        <div style="text-align:center;padding:24px;color:#9CA3AF;font-size:12px;">
-            达标奖 ≥180分 · 超额奖 ≥240分 · 冠军奖 第1名≥220分
+            <div style="text-align:center;padding:14px 0 4px;color:#9CA3AF;font-size:12px;">
+                活动期间达标奖 ≥180分 · 超额奖 ≥240分 · 冠军奖 第1名≥220分
+            </div>
         </div>
     </div>
     <script>
@@ -86,9 +90,9 @@
             document.getElementById('panel-total').style.display = which === 'total' ? 'block' : 'none';
         }
 
-        function renderList(elId, titleId, rows, titlePrefix) {
+        function renderList(elId, titleId, rows, titlePrefix, showCount) {
             const box = document.getElementById(elId);
-            document.getElementById(titleId).textContent = titlePrefix + (rows.length ? '（' + rows.length + ' 人）' : '（暂无）');
+            document.getElementById(titleId).textContent = titlePrefix + (showCount && rows.length ? '（' + rows.length + ' 人）' : '');
             if (!rows.length) {
                 box.innerHTML = '<div class="empty">今天还没有人打卡，快去抢第一！</div>';
                 return;
@@ -97,9 +101,10 @@
             rows.forEach((r, i) => {
                 const cls = i === 0 ? 'gold' : (i === 1 ? 'silver' : (i === 2 ? 'bronze' : ''));
                 const meCls = (ME && r.name === ME) ? ' me' : '';
+                const companyHtml = r.company ? '<span class="company">' + escapeHtml(r.company) + '</span>' : '';
                 html += '<div class="row' + meCls + '">' +
                     '<div class="rank ' + cls + '">' + (i + 1) + '</div>' +
-                    '<div class="name">' + escapeHtml(r.name) + (meCls ? ' （我）' : '') + '</div>' +
+                    '<div class="name">' + escapeHtml(r.name) + (meCls ? ' （我）' : '') + companyHtml + '</div>' +
                     '<div class="score">' + r.total + '<span style="font-size:12px;color:#6B7280;font-weight:400;"> 分</span></div>' +
                     '</div>';
             });
@@ -115,8 +120,8 @@
                 const resp = await fetch('/api/leaderboard', { cache: 'no-store' });
                 const data = await resp.json();
                 if (!data.ok) return;
-                renderList('today-list', 'today-title', data.today_rows, '今日日榜');
-                renderList('total-list', 'total-title', data.rows, '累计总榜（共 ' + data.rows.length + ' 人参与）');
+                renderList('today-list', 'today-title', data.today_rows, '今日日榜', true);
+                renderList('total-list', 'total-title', data.rows, '累计总榜', false);
                 const now = new Date();
                 document.getElementById('updated').textContent =
                     '更新于 ' + now.toTimeString().slice(0, 8);

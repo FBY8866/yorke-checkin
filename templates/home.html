@@ -120,6 +120,11 @@
         .rec-content { font-size: 13px; color: #374151; margin-top: 6px; line-height: 1.5; word-break: break-all; }
         .rec-addr { font-size: 12px; color: #047857; margin-top: 4px; }
         .rec-photo { max-width: 100%; border-radius: 8px; margin-top: 8px; display: block; }
+        .rec-edit-btn {
+            background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE;
+            padding: 3px 10px; border-radius: 12px; font-size: 12px; cursor: pointer;
+        }
+        .rec-edit-btn:active { background: #DBEAFE; }
     </style>
 </head>
 <body>
@@ -142,6 +147,10 @@
         </div>
     </div>
 
+    <div style="background:#FEF3C7;color:#92400E;padding:10px 20px;font-size:13px;line-height:1.5;text-align:center;">
+        🎯 坚持每日做到满分标准，即可获得对应达标专项奖励
+    </div>
+
     <div class="section-title">
         <span>📌 必做项（每日 2 分）</span>
         <span class="badge {% if today.has_morning and today.has_evening %}green{% endif %}">
@@ -152,15 +161,15 @@
         <div class="checkin-row" onclick="openCheckin('morning')">
             <div class="icon {% if today.has_morning %}ic-done{% else %}ic-morning{% endif %}">{% if today.has_morning %}✓{% else %}🌅{% endif %}</div>
             <div class="info">
-                <div class="info-title">早目标打卡</div>
-                <div class="info-sub">发布当日目标（任意时间可打）</div>
+                <div class="info-title">今日目标打卡</div>
+                <div class="info-sub">写下今日目标（10:00 后不可修改）</div>
             </div>
             <div class="points"><span class="points-num">+1</span> 分</div>
         </div>
         <div class="checkin-row" onclick="openCheckin('evening')">
             <div class="icon {% if today.has_evening %}ic-done{% else %}ic-evening{% endif %}">{% if today.has_evening %}✓{% else %}🌙{% endif %}</div>
             <div class="info">
-                <div class="info-title">晚总结打卡</div>
+                <div class="info-title">今日总结打卡</div>
                 <div class="info-sub">20:00 前提交当日总结</div>
             </div>
             <div class="points"><span class="points-num">+1</span> 分</div>
@@ -176,7 +185,7 @@
             <div class="icon ic-optional">👔</div>
             <div class="info">
                 <div class="info-title">设计师拜访</div>
-                <div class="info-sub">需提供拜访照片(带水印)/沟通记录</div>
+                <div class="info-sub">都是不一定的，根据规则来修改</div>
             </div>
             <div class="points">+1·封顶2</div>
         </div>
@@ -184,7 +193,7 @@
             <div class="icon ic-optional">🏢</div>
             <div class="info">
                 <div class="info-title">异业拜访</div>
-                <div class="info-sub">装修/建材等渠道(带水印)</div>
+                <div class="info-sub">都是不一定的，根据规则来修改</div>
             </div>
             <div class="points">+1·封顶2</div>
         </div>
@@ -192,7 +201,7 @@
             <div class="icon ic-optional">🤝</div>
             <div class="info">
                 <div class="info-title">老顾客维护</div>
-                <div class="info-sub">回访/保养提醒/节日问候</div>
+                <div class="info-sub">都是不一定的，根据规则来修改</div>
             </div>
             <div class="points">+1·封顶1</div>
         </div>
@@ -200,7 +209,7 @@
             <div class="icon ic-optional">📱</div>
             <div class="info">
                 <div class="info-title">朋友圈发布</div>
-                <div class="info-sub">约克品牌/产品/活动</div>
+                <div class="info-sub">都是不一定的，根据规则来修改</div>
             </div>
             <div class="points">+1·封顶1</div>
         </div>
@@ -208,7 +217,7 @@
             <div class="icon ic-optional">🆕</div>
             <div class="info">
                 <div class="info-title">新增意向客户</div>
-                <div class="info-sub">e2e 系统录入</div>
+                <div class="info-sub">都是不一定的，根据规则来修改</div>
             </div>
             <div class="points">+1·封顶2</div>
         </div>
@@ -216,13 +225,13 @@
             <div class="icon ic-optional">💬</div>
             <div class="info">
                 <div class="info-title">顾客跟进谈单</div>
-                <div class="info-sub">跟单阶段及反馈截图</div>
+                <div class="info-sub">都是不一定的，根据规则来修改</div>
             </div>
             <div class="points">+1·封顶2</div>
         </div>
     </div>
 
-    {% set TNAME = {'morning':'🌅 早目标','evening':'🌙 晚总结','designer':'👔 设计师拜访','cross':'🏢 异业拜访','oldcustomer':'🤝 老顾客维护','moment':'📱 朋友圈','newlead':'🆕 新增意向','followup':'💬 跟进谈单'} %}
+    {% set TNAME = {'morning':'🌅 今日目标','evening':'🌙 今日总结','designer':'👔 设计师拜访','cross':'🏢 异业拜访','oldcustomer':'🤝 老顾客维护','moment':'📱 朋友圈','newlead':'🆕 新增意向','followup':'💬 跟进谈单'} %}
     <div class="section-title">
         <span>📋 今日打卡记录</span>
         <span class="badge">{{ today_records|length }} 条</span>
@@ -232,13 +241,15 @@
         <div style="padding:20px;text-align:center;color:#9CA3AF;font-size:13px;">今天还没有打卡记录</div>
         {% else %}
         {% for rec in today_records %}
-        <div class="record-row">
+        <div class="record-row" id="rec-{{ rec.id }}">
             <div class="rec-head">
                 <span class="rec-type">{{ TNAME.get(rec.check_type, rec.check_type) }}</span>
                 <span class="rec-time">{{ rec.submitted_at }}</span>
                 <span class="rec-points">+{{ rec.points }} 分</span>
+                <button type="button" class="rec-edit-btn" onclick="openEdit({{ rec.id }}, '{{ rec.check_type }}', `{{ rec.content or '' }}`, `{{ rec.customer_name or '' }}`)">✏️ 修改</button>
             </div>
             {% if rec.content %}<div class="rec-content">{{ rec.content }}</div>{% endif %}
+            {% if rec.customer_name %}<div class="rec-addr" style="color:#B45309;">👤 {{ rec.customer_name }}</div>{% endif %}
             {% if rec.address %}<div class="rec-addr">📍 {{ rec.address }}</div>{% endif %}
             {% if rec.photo_path %}<img src="/{{ rec.photo_path }}" class="rec-photo" alt="打卡照片">{% endif %}
         </div>
@@ -270,12 +281,12 @@
                 <input type="hidden" name="check_type" id="check_type">
                 <input type="hidden" name="lat" id="lat">
                 <input type="hidden" name="lng" id="lng">
-                <div class="form-group">
-                    <label>说明（必填）</label>
-                    <textarea name="content" required placeholder="例：拜访了X设计师，沟通了XX方案，约定周四再访"></textarea>
+                <div class="form-group" id="content-group">
+                    <label id="content-label">说明</label>
+                    <textarea name="content" id="content-input" placeholder="都是不一定的，根据规则来修改"></textarea>
                 </div>
                 <div class="form-group" id="customer-group" style="display:none;">
-                    <label>客户姓名（必填）</label>
+                    <label id="customer-label">客户姓名（必填）</label>
                     <input type="text" name="customer_name" id="customer_name" placeholder="本次拜访的客户姓名">
                 </div>
                 <div class="form-group" id="photo-group">
@@ -293,16 +304,47 @@
         </div>
     </div>
 
+    <div id="edit-modal" class="modal-overlay">
+        <div class="modal">
+            <h3 id="edit-modal-title">✏️ 修改打卡</h3>
+            <div class="modal-sub" id="edit-modal-sub"></div>
+            <form id="edit-form" enctype="multipart/form-data">
+                <input type="hidden" name="checkin_id" id="edit-checkin-id">
+                <input type="hidden" name="lat" id="edit-lat">
+                <input type="hidden" name="lng" id="edit-lng">
+                <div class="form-group" id="edit-content-group">
+                    <label>说明</label>
+                    <textarea name="content" id="edit-content" placeholder="都是不一定的，根据规则来修改"></textarea>
+                </div>
+                <div class="form-group" id="edit-customer-group" style="display:none;">
+                    <label id="edit-customer-label">客户姓名</label>
+                    <input type="text" name="customer_name" id="edit-customer" placeholder="本次拜访的客户姓名">
+                </div>
+                <div class="form-group" id="edit-photo-group">
+                    <label>重新上传照片（选填，留空保留原图）</label>
+                    <label class="photo-input" id="edit-photo-label">
+                        <span id="edit-photo-text">📷 点击重新选择 / 上传</span>
+                        <input type="file" name="photo" accept="image/*" style="display:none" id="edit-photo-input">
+                    </label>
+                    <img id="edit-preview" class="preview">
+                <div style="font-size:12px;color:#9CA3AF;margin-top:6px;">如微信内无法选择照片，请点右上角「···」→「在浏览器中打开」</div>
+                </div>
+                <button type="submit" class="submit-btn">保存修改</button>
+                <button type="button" class="cancel-btn" onclick="closeEditModal()">取消</button>
+            </form>
+        </div>
+    </div>
+
     <script>
         const TYPE_LABELS = {
-            morning: { title: '🌅 早目标打卡', sub: '请写下今天要达成的目标', needPhoto: false, needCustomer: false },
-            evening: { title: '🌙 晚总结打卡', sub: '请写下今天的总结', needPhoto: false, needCustomer: false, deadline: '20:00' },
-            designer: { title: '👔 设计师拜访', sub: '请说明拜访对象与沟通要点', needPhoto: true, needCustomer: true },
-            cross: { title: '🏢 异业拜访', sub: '请说明渠道与对接内容', needPhoto: true, needCustomer: true },
-            oldcustomer: { title: '🤝 老顾客维护', sub: '回访/保养提醒/节日问候', needPhoto: true, needCustomer: true },
-            moment: { title: '📱 朋友圈发布', sub: '已发布的朋友圈内容简介', needPhoto: true, needCustomer: true },
-            newlead: { title: '🆕 新增意向客户', sub: '客户来源、需求、跟进计划', needPhoto: false, needCustomer: true },
-            followup: { title: '💬 顾客跟进谈单', sub: '跟单阶段、反馈记录', needPhoto: true, needCustomer: true },
+            morning: { title: '🌅 今日目标打卡', sub: '写下今日目标', needPhoto: false, needCustomer: false, needContent: true },
+            evening: { title: '🌙 今日总结打卡', sub: '写下今日总结', needPhoto: false, needCustomer: false, needContent: true, deadline: '20:00' },
+            designer: { title: '👔 设计师拜访', sub: '都是不一定的，根据规则来修改', needPhoto: true, needCustomer: true, needContent: true },
+            cross: { title: '🏢 异业拜访', sub: '都是不一定的，根据规则来修改', needPhoto: true, needCustomer: true, needContent: true },
+            oldcustomer: { title: '🤝 老顾客维护', sub: '都是不一定的，根据规则来修改', needPhoto: true, needCustomer: true, needContent: true },
+            moment: { title: '📱 朋友圈发布', sub: '都是不一定的，根据规则来修改', needPhoto: true, needCustomer: false, needContent: true },
+            newlead: { title: '🆕 新增意向客户', sub: '都是不一定的，根据规则来修改', needPhoto: false, needCustomer: true, needContent: false, customerLabel: '姓名预计地址' },
+            followup: { title: '💬 顾客跟进谈单', sub: '都是不一定的，根据规则来修改', needPhoto: true, needCustomer: true, needContent: true },
         };
 
         function openCheckin(type) {
@@ -310,20 +352,22 @@
             document.getElementById('modal-title').textContent = cfg.title;
             document.getElementById('modal-sub').textContent = cfg.sub;
             document.getElementById('check_type').value = type;
+            // 照片
             const photoGroup = document.getElementById('photo-group');
             photoGroup.style.display = cfg.needPhoto ? 'block' : 'none';
-            if (!cfg.needPhoto) {
-                document.getElementById('photo-input').removeAttribute('required');
-            } else {
-                document.getElementById('photo-input').setAttribute('required', 'required');
-            }
+            if (!cfg.needPhoto) document.getElementById('photo-input').removeAttribute('required');
+            else document.getElementById('photo-input').setAttribute('required', 'required');
+            // 说明
+            const contentGroup = document.getElementById('content-group');
+            contentGroup.style.display = cfg.needContent ? 'block' : 'none';
+            if (!cfg.needContent) document.getElementById('content-input').removeAttribute('required');
+            else document.getElementById('content-input').setAttribute('required', 'required');
+            // 客户姓名 / 姓名预计地址
             const customerGroup = document.getElementById('customer-group');
             customerGroup.style.display = cfg.needCustomer ? 'block' : 'none';
-            if (!cfg.needCustomer) {
-                document.getElementById('customer_name').removeAttribute('required');
-            } else {
-                document.getElementById('customer_name').setAttribute('required', 'required');
-            }
+            if (!cfg.needCustomer) document.getElementById('customer_name').removeAttribute('required');
+            else document.getElementById('customer_name').setAttribute('required', 'required');
+            document.getElementById('customer-label').textContent = (cfg.customerLabel || '客户姓名') + '（必填）';
             document.getElementById('modal').classList.add('show');
         }
 
@@ -404,6 +448,72 @@
 
         document.getElementById('modal').addEventListener('click', function(e) {
             if (e.target === this) closeModal();
+        });
+
+        // ============== 修改打卡 ==============
+        function escapeAttr(s) {
+            return String(s == null ? '' : s).replace(/`/g, '\\`').replace(/\\n/g, ' ');
+        }
+        function openEdit(id, type, content, customer) {
+            const cfg = TYPE_LABELS[type];
+            document.getElementById('edit-modal-title').textContent = '✏️ 修改打卡 · ' + (cfg.title || type);
+            document.getElementById('edit-modal-sub').textContent = cfg.sub;
+            document.getElementById('edit-checkin-id').value = id;
+            // 说明
+            const cg = document.getElementById('edit-content-group');
+            cg.style.display = cfg.needContent ? 'block' : 'none';
+            document.getElementById('edit-content').value = content || '';
+            // 客户姓名
+            const cug = document.getElementById('edit-customer-group');
+            cug.style.display = cfg.needCustomer ? 'block' : 'none';
+            document.getElementById('edit-customer-label').textContent = (cfg.customerLabel || '客户姓名');
+            document.getElementById('edit-customer').value = customer || '';
+            // 照片
+            const pg = document.getElementById('edit-photo-group');
+            pg.style.display = cfg.needPhoto ? 'block' : 'none';
+            document.getElementById('edit-modal').classList.add('show');
+        }
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.remove('show');
+            document.getElementById('edit-form').reset();
+            document.getElementById('edit-preview').style.display = 'none';
+        }
+        document.getElementById('edit-photo-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                document.getElementById('edit-preview').src = ev.target.result;
+                document.getElementById('edit-preview').style.display = 'block';
+                document.getElementById('edit-photo-label').classList.add('has-photo');
+                document.getElementById('edit-photo-text').textContent = '✓ 已选照片（自动加水印）';
+            };
+            reader.readAsDataURL(file);
+        });
+        document.getElementById('edit-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            try {
+                const pos = await getLocation();
+                if (pos) {
+                    document.getElementById('edit-lat').value = pos.lat;
+                    document.getElementById('edit-lng').value = pos.lng;
+                }
+            } catch (err) {}
+            const fd = new FormData(e.target);
+            const btn = e.target.querySelector('.submit-btn');
+            btn.disabled = true; btn.textContent = '提交中...';
+            try {
+                const r = await fetch('/api/checkin/' + encodeURIComponent(document.getElementById('edit-checkin-id').value) + '/edit', { method: 'POST', body: fd });
+                const data = await r.json();
+                if (data.ok) { showToast(data.message || '修改成功'); setTimeout(() => location.reload(), 1200); }
+                else { showToast(data.error, true); btn.disabled = false; btn.textContent = '保存修改'; }
+            } catch (err) {
+                showToast('网络错误：' + err.message, true);
+                btn.disabled = false; btn.textContent = '保存修改';
+            }
+        });
+        document.getElementById('edit-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeEditModal();
         });
     </script>
 </body>

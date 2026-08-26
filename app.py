@@ -619,14 +619,18 @@ def api_checkin():
         return jsonify({'ok': False, 'error': '今日该类型已打卡，请勿重复'}), 400
     _conn.close()
 
-    # 选做项要求照片
+    # 选做项要求（按类型差异化）
+    # - newlead: 只要客户姓名(说明、照片都不要求)
+    # - moment : 要照片 + 说明，不要客户姓名
+    # - 其他选做 : 照片 + 说明 + 客户姓名 都要
     if check_type in optional_types:
-        if not photo or not photo.filename:
-            return jsonify({'ok': False, 'error': '选做项必须上传照片'}), 400
-        if not content:
-            return jsonify({'ok': False, 'error': '请填写说明文字'}), 400
-        if not customer_name:
-            return jsonify({'ok': False, 'error': '请填写客户姓名'}), 400
+        if check_type != 'newlead':
+            if not photo or not photo.filename:
+                return jsonify({'ok': False, 'error': '选做项必须上传照片'}), 400
+            if not content:
+                return jsonify({'ok': False, 'error': '请填写说明'}), 400
+        if check_type != 'moment' and not customer_name:
+            return jsonify({'ok': False, 'error': '请填写姓名预计地址' if check_type == 'newlead' else '请填写客户姓名'}), 400
 
     # 必做项要求内容
     if check_type in required_types and not content:
@@ -666,6 +670,88 @@ def api_checkin():
     })
 
 
+@app.route('/api/checkin/<int:checkin_id>/edit', methods=['POST'])
+def api_checkin_edit(checkin_id):
+    """修改本人打卡：今日目标(morning) 10:00 后不可修改；其他类型随时可改。
+    可改字段：说明(content)、客户姓名/姓名预计地址(customer_name)、照片(可选)。
+    """
+    if 'member_id' not in session:
+        return jsonify({'ok': False, 'error': '未登录'}), 401
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM checkins WHERE id=?', (checkin_id,))
+    rec = cur.fetchone()
+    if not rec:
+        conn.close()
+        return jsonify({'ok': False, 'error': '记录不存在'}), 404
+    if rec['member_id'] != session['member_id']:
+        conn.close()
+        return jsonify({'ok': False, 'error': '无权修改他人打卡'}), 403
+
+    # 今日目标 10:00 后不可修改
+    now = now_cst()
+    today = now.strftime('%Y-%m-%d')
+    if rec['check_type'] == 'morning' and rec['check_date'] == today and now.strftime('%H:%M') > '10:00':
+        conn.close()
+        return jsonify({'ok': False, 'error': '今日目标 10:00 后不可修改'}), 400
+
+    content = request.form.get('content', None)
+    customer_name = request.form.get('customer_name', None)
+    photo = request.files.get('photo')
+
+    update_fields = []
+    update_values = []
+    if content is not None:
+        update_fields.append('content = ?')
+        update_values.append(content.strip())
+    if customer_name is not None:
+        update_fields.append('customer_name = ?')
+        update_values.append(customer_name.strip())
+
+    new_photo_path = None
+    if photo and photo.filename:
+        raw = photo.read()
+        name = session.get('member_name', '')
+        ts = now.strftime('%Y-%m-%d %H:%M')
+        lat = float(request.form.get('lat') or 0) or None
+        lng = float(request.form.get('lng') or 0) or None
+        coord_text = f"GPS {lat:.4f}, {lng:.4f}" if (lat is not None and lng is not None) else None
+        wm = add_watermark_pil(raw, f"{name} · {ts}", coord_text)
+        fname = f"{rec['member_id']}_{today}_{rec['check_type']}_e{uuid.uuid4().hex[:6]}.jpg"
+        fpath = os.path.join(app.config['UPLOAD_FOLDER'], fname)
+        with open(fpath, 'wb') as f:
+            f.write(wm)
+        new_photo_path = f'uploads/{fname}'
+        update_fields.append('photo_path = ?')
+        update_values.append(new_photo_path)
+        # 同步坐标 / 地址（如有）
+        lat_s = request.form.get('lat')
+        lng_s = request.form.get('lng')
+        addr_s = request.form.get('address', '').strip()
+        if lat_s and lng_s:
+            try:
+                update_fields.append('lat = ?')
+                update_values.append(float(lat_s))
+                update_fields.append('lng = ?')
+                update_values.append(float(lng_s))
+                if addr_s:
+                    update_fields.append('address = ?')
+                    update_values.append(addr_s)
+            except ValueError:
+                pass
+
+    if not update_fields:
+        conn.close()
+        return jsonify({'ok': False, 'error': '没有需要修改的内容'}), 400
+
+    update_values.append(checkin_id)
+    cur.execute(f'UPDATE checkins SET {", ".join(update_fields)} WHERE id = ?', update_values)
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'message': '修改成功'})
+
+
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
@@ -692,10 +778,12 @@ def api_today_checkins():
 
 
 def build_leaderboard():
-    """计算累计总榜与今日日榜，返回 (rows, today_rows, today)"""
+    """计算累计总榜与今日日榜，返回 (rows, today_rows, today)
+    rows 中含公司名 company（若成员尚未绑定公司则为空）
+    """
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('SELECT id, name FROM members WHERE is_admin = 0 AND is_active = 1')
+    cur.execute('SELECT id, name, company FROM members WHERE is_admin = 0 AND is_active = 1')
     members = [dict(r) for r in cur.fetchall()]
 
     # 累计总榜
@@ -711,7 +799,7 @@ def build_leaderboard():
         for d in dates:
             total += compute_day_points(m['id'], d)['total']
         total += get_adjustment_total(m['id'])
-        rows.append({'name': m['name'], 'total': total})
+        rows.append({'name': m['name'], 'company': m.get('company') or '', 'total': total})
     rows.sort(key=lambda x: -x['total'])
 
     # 今日日榜：按今日(当天)得分排序，仅列今日有打卡分的人
@@ -720,7 +808,7 @@ def build_leaderboard():
     for m in members:
         day = compute_day_points(m['id'], today)
         if day['total'] > 0:
-            today_rows.append({'name': m['name'], 'total': day['total']})
+            today_rows.append({'name': m['name'], 'company': m.get('company') or '', 'total': day['total']})
     today_rows.sort(key=lambda x: -x['total'])
 
     conn.close()
