@@ -12,6 +12,7 @@ import uuid
 import json
 import urllib.request
 import urllib.parse
+from werkzeug.security import generate_password_hash, check_password_hash
 
 CST = timezone(timedelta(hours=8))  # 中国时区 UTC+8（无夏令时，固定偏移）
 
@@ -190,6 +191,21 @@ def init_db():
     for cname in DEALER_COMPANIES:
         cur.execute('INSERT OR IGNORE INTO companies (name, boss_password) VALUES (?, ?)',
                     (cname, DEFAULT_COMPANY_PASSWORD))
+
+    # 管理员账号表（终端后台独立认证：username + password，密码 werkzeug 哈希存储）
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS admins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    # 种子管理员账号：浙江吉瑞 / ZJJR123456（仅首次启动写入，密码已哈希）
+    cur.execute('SELECT 1 FROM admins WHERE username = ?', ('浙江吉瑞',))
+    if not cur.fetchone():
+        cur.execute('INSERT INTO admins (username, password_hash) VALUES (?, ?)',
+                    ('浙江吉瑞', generate_password_hash('ZJJR123456')))
 
     # 一次性清空历史演示数据（傅兵宇等旧成员），仅首次启动执行，之后重启不再清空
     cur.execute("SELECT value FROM activity_config WHERE key='wiped_v2'")
@@ -427,8 +443,9 @@ def add_watermark_pil(img_bytes, text, coord_text=None):
 @app.route('/')
 def index():
     """主页 - 根据登录状态分流"""
+    if session.get('is_admin'):
+        return redirect(url_for('admin_dashboard'))
     member_id = session.get('member_id')
-    is_admin = session.get('is_admin', False)
     if member_id:
         return redirect(url_for('home'))
     return render_template('login.html', companies=get_companies())
@@ -436,76 +453,53 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    """员工登录：公司 + 姓名识别（管理员请前往 /admin/login）"""
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         company = request.form.get('company', '').strip()
         phone = request.form.get('phone', '').strip()
-        admin_code = request.form.get('admin_code', '').strip()
 
         if not name:
             return render_template('login.html', error='请输入姓名', companies=get_companies())
+        if not company:
+            return render_template('login.html', error='请选择公司', companies=get_companies())
 
         conn = get_db()
         cur = conn.cursor()
-        # 检查是否是管理员（终端后台，全量可改）
-        is_admin = (admin_code == 'yorke2026')
 
-        if is_admin:
-            cur.execute('SELECT * FROM members WHERE name = ? AND is_admin = 1', (name,))
-            existing = cur.fetchone()
-            if existing:
-                session['member_id'] = existing['id']
-                session['member_name'] = existing['name']
-                session['is_admin'] = True
-                conn.close()
-                return redirect(url_for('admin_dashboard'))
-
-            # 创建管理员
-            uid = f"admin-{uuid.uuid4().hex[:8]}"
-            cur.execute('''
-                INSERT INTO members (uid, name, company, phone, is_admin)
-                VALUES (?, ?, ?, ?, 1)
-            ''', (uid, name, company, phone))
-            conn.commit()
-            member_id = cur.lastrowid
-            session['member_id'] = member_id
-            session['member_name'] = name
-            session['is_admin'] = True
+        # 公司必须来自下拉名单（companies 表），防止乱填
+        cur.execute('SELECT 1 FROM companies WHERE name = ?', (company,))
+        if not cur.fetchone():
             conn.close()
-            return redirect(url_for('admin_dashboard'))
-        else:
-            # 成员登录：按「公司 + 姓名」识别同一用户，避免不同公司重名导致账号分裂、跨公司串数据
-            cur.execute('SELECT * FROM members WHERE company = ? AND name = ? AND is_admin = 0 AND is_active = 1', (company, name))
-            existing = cur.fetchone()
-            if existing:
-                if phone:
-                    cur.execute('UPDATE members SET phone = COALESCE(NULLIF(?, ""), phone) WHERE id = ?',
-                                (phone, existing['id']))
-                    conn.commit()
-                session['member_id'] = existing['id']
-                session['member_name'] = existing['name']
-                session['is_admin'] = False
-                conn.close()
-                return redirect(url_for('home'))
+            return render_template('login.html', error='请在下拉列表中选择有效的公司', companies=get_companies())
 
-            # 公司必须来自下拉名单（companies 表），防止乱填
-            cur.execute('SELECT 1 FROM companies WHERE name = ?', (company,))
-            if not cur.fetchone():
-                conn.close()
-                return render_template('login.html', error='请在下拉列表中选择有效的公司', companies=get_companies())
-            # 创建新成员
-            uid = f"m-{uuid.uuid4().hex[:8]}"
-            cur.execute('''
-                INSERT INTO members (uid, name, company, phone, is_admin)
-                VALUES (?, ?, ?, ?, 0)
-            ''', (uid, name, company, phone))
-            conn.commit()
-            member_id = cur.lastrowid
-            session['member_id'] = member_id
-            session['member_name'] = name
+        # 按「公司 + 姓名」识别同一用户，避免不同公司重名导致账号分裂、跨公司串数据
+        cur.execute('SELECT * FROM members WHERE company = ? AND name = ? AND is_admin = 0 AND is_active = 1', (company, name))
+        existing = cur.fetchone()
+        if existing:
+            if phone:
+                cur.execute('UPDATE members SET phone = COALESCE(NULLIF(?, ""), phone) WHERE id = ?',
+                            (phone, existing['id']))
+                conn.commit()
+            session['member_id'] = existing['id']
+            session['member_name'] = existing['name']
             session['is_admin'] = False
             conn.close()
             return redirect(url_for('home'))
+
+        # 创建新成员
+        uid = f"m-{uuid.uuid4().hex[:8]}"
+        cur.execute('''
+            INSERT INTO members (uid, name, company, phone, is_admin)
+            VALUES (?, ?, ?, ?, 0)
+        ''', (uid, name, company, phone))
+        conn.commit()
+        member_id = cur.lastrowid
+        session['member_id'] = member_id
+        session['member_name'] = name
+        session['is_admin'] = False
+        conn.close()
+        return redirect(url_for('home'))
 
     return render_template('login.html', companies=get_companies())
 
@@ -519,10 +513,10 @@ def logout():
 @app.route('/home')
 def home():
     """成员主页"""
-    if not session.get('member_id'):
-        return redirect(url_for('index'))
     if session.get('is_admin'):
         return redirect(url_for('admin_dashboard'))
+    if not session.get('member_id'):
+        return redirect(url_for('index'))
 
     member_id = session['member_id']
     today = now_cst().strftime('%Y-%m-%d')
@@ -831,11 +825,35 @@ def api_leaderboard():
     return jsonify({'ok': True, 'rows': rows, 'today_rows': today_rows, 'today': today})
 
 
+@app.route('/admin/login', methods=['GET', 'POST'])
+def admin_login():
+    """终端后台管理员登录：独立账号（username + password），与员工登录隔离"""
+    if session.get('is_admin'):
+        return redirect(url_for('admin_dashboard'))
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        if not username or not password:
+            return render_template('admin_login.html', error='请输入用户名和密码')
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM admins WHERE username = ?', (username,))
+        row = cur.fetchone()
+        conn.close()
+        if row and check_password_hash(row['password_hash'], password):
+            session.clear()
+            session['is_admin'] = True
+            session['member_name'] = row['username']
+            return redirect(url_for('admin_dashboard'))
+        return render_template('admin_login.html', error='用户名或密码错误')
+    return render_template('admin_login.html')
+
+
 @app.route('/admin')
 def admin_dashboard():
     """管理员仪表盘"""
     if not session.get('is_admin'):
-        return redirect(url_for('index'))
+        return redirect(url_for('admin_login'))
 
     msg = request.args.get('msg')
     error = request.args.get('error')
@@ -1374,8 +1392,9 @@ if __name__ == '__main__':
     init_db()
     print('=' * 60)
     print('约克超级品牌日打卡系统已启动')
-    print('访问地址: http://localhost:5000')
-    print('管理员登录时使用邀请码: yorke2026')
+    print('员工登录: http://localhost:5000/')
+    print('经销商老板端: http://localhost:5000/boss/login')
+    print('管理员登录: http://localhost:5000/admin/login (账号: 浙江吉瑞)')
     print('=' * 60)
     # 云部署：端口读环境变量 PORT；调试模式仅在本地 FLASK_DEBUG=1 时开启
     port = int(os.environ.get('PORT', 5000))

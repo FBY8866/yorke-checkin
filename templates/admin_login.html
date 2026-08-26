@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>管理员登录 - 约克超级品牌日打卡系统</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: white; border-radius: 16px; padding: 32px 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.2); max-width: 400px; width: 100%;
+        }
+        h1 { color: #1E40AF; font-size: 22px; margin-bottom: 6px; text-align: center; }
+        .subtitle { color: #6B7280; font-size: 13px; text-align: center; margin-bottom: 24px; }
+        label { display: block; color: #374151; font-size: 14px; margin-bottom: 6px; margin-top: 14px; font-weight: 500; }
+        input[type="text"], input[type="password"] {
+            width: 100%; padding: 12px 14px; border: 1.5px solid #E5E7EB; border-radius: 8px;
+            font-size: 16px; transition: border-color 0.2s;
+        }
+        input:focus { outline: none; border-color: #3B82F6; }
+        .btn {
+            width: 100%; padding: 14px; background: #1E40AF; color: white;
+            border: none; border-radius: 8px; font-size: 16px; font-weight: 600;
+            margin-top: 24px; cursor: pointer;
+        }
+        .btn:hover { background: #1E3A8A; }
+        .error {
+            color: #DC2626; font-size: 13px; margin-top: 12px; text-align: center;
+            padding: 10px; background: #FEE2E2; border-radius: 8px;
+        }
+        .back { text-align: center; margin-top: 18px; }
+        .back a { color: #3B82F6; font-size: 13px; text-decoration: none; }
+        .back a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>📊 管理员登录</h1>
+        <div class="subtitle">约克超级品牌日打卡系统 · 终端后台</div>
+        {% if error %}<div class="error">{{ error }}</div>{% endif %}
+        <form method="POST" action="/admin/login">
+            <label>用户名</label>
+            <input type="text" name="username" required autocomplete="username" placeholder="请输入管理员用户名">
+            <label>密码</label>
+            <input type="password" name="password" required autocomplete="current-password" placeholder="请输入密码">
+            <button type="submit" class="btn">登录后台</button>
+        </form>
+        <div class="back">
+            <a href="/">← 返回员工登录</a>
+        </div>
+    </div>
+</body>
+</html>
