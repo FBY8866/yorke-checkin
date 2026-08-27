@@ -338,18 +338,62 @@ def compute_day_points(member_id, check_date):
 
 
 def recompute_and_save_points(member_id, check_date):
-    """重新计算并保存某日所有相关打卡记录的 points 字段"""
-    result = compute_day_points(member_id, check_date)
+    """重新计算并保存某日每条打卡记录的 points（按封顶规则逐条归属）。
+
+    必做项（早目标/晚总结）各计对应分；选做项每类前 cap 条各计 1 分，超出封顶的部分不计分；
+    若选做合计超过当日总分封顶(OPTIONAL_TOTAL_CAP)，从最晚的选做记录起逐条扣减直至达标。
+    这样每条记录的 points 为其真实贡献，封顶未计分的记录 points=0，前端即可显示「不计分」。
+    """
     conn = get_db()
     cur = conn.cursor()
-    # 标记打分结果到当日记录上（总分=成员当日总分）
     cur.execute('''
-        UPDATE checkins SET points = ?
-        WHERE member_id = ? AND check_date = ?
-    ''', (result['total'], member_id, check_date))
+        SELECT id, check_type, submitted_at FROM checkins
+        WHERE member_id = ? AND check_date = ? AND is_valid = 1
+        ORDER BY submitted_at ASC, id ASC
+    ''', (member_id, check_date))
+    recs = cur.fetchall()
+
+    type_seq = {}        # check_type -> [record_id,...] 按时间顺序
+    per_record = {}      # record_id -> points
+    sub_at = {}          # record_id -> submitted_at
+    for r in recs:
+        per_record[r['id']] = 0
+        sub_at[r['id']] = r['submitted_at']
+        type_seq.setdefault(r['check_type'], []).append(r['id'])
+
+    # 必做项（早目标/晚总结）各自独立计分
+    if 'morning' in type_seq:
+        per_record[type_seq['morning'][0]] = MORNING_POINTS
+    if 'evening' in type_seq:
+        per_record[type_seq['evening'][0]] = EVENING_POINTS
+
+    # 选做项：每类前 cap 条各计 1 分
+    optional_credited = []   # (submitted_at, record_id)
+    for t, ids in type_seq.items():
+        if t in ('morning', 'evening'):
+            continue
+        cap = OPTIONAL_CAPS.get(t, 0)
+        for i, rid in enumerate(ids):
+            if i < cap:
+                per_record[rid] = OPTIONAL_PER_UNIT
+                optional_credited.append((sub_at[rid], rid))
+
+    # 选做总分封顶：超出部分从最晚的选做记录起逐条扣减
+    optional_sum = sum(per_record[rid] for _, rid in optional_credited)
+    if optional_sum > OPTIONAL_TOTAL_CAP:
+        need_cut = optional_sum - OPTIONAL_TOTAL_CAP
+        optional_credited.sort(reverse=True)  # 最晚的先扣
+        for _, rid in optional_credited:
+            if need_cut <= 0:
+                break
+            per_record[rid] = 0
+            need_cut -= 1
+
+    for rid, pts in per_record.items():
+        cur.execute('UPDATE checkins SET points = ? WHERE id = ?', (pts, rid))
     conn.commit()
     conn.close()
-    return result
+    return compute_day_points(member_id, check_date)
 
 
 def get_adjustment_total(member_id):
@@ -1013,17 +1057,38 @@ def admin_member_add():
     return redirect(url_for('admin_dashboard', msg='已添加成员：' + name))
 
 
+def _delete_checkin_photo(photo_path):
+    """删除一条打卡记录对应的照片文件（不保留）"""
+    if not photo_path:
+        return
+    try:
+        fpath = os.path.join(UPLOAD_DIR, photo_path.replace('uploads/', '', 1))
+        if os.path.exists(fpath):
+            os.remove(fpath)
+    except Exception:
+        pass
+
+
 @app.route('/admin/member/<int:member_id>/delete', methods=['POST'])
 def admin_member_delete(member_id):
-    """后台软删除成员（保留打卡记录）"""
+    """后台删除成员：同时硬删除其全部打卡记录、照片及相关子表，不保留"""
     if not session.get('is_admin'):
         return redirect(url_for('index'))
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('UPDATE members SET is_active=0 WHERE id=? AND is_admin=0', (member_id,))
+    # 先删除该成员全部照片文件
+    cur.execute('SELECT photo_path FROM checkins WHERE member_id=?', (member_id,))
+    for r in cur.fetchall():
+        _delete_checkin_photo(r['photo_path'])
+    # 硬删除打卡记录及关联子表（先子后父，避免外键约束）
+    cur.execute('DELETE FROM checkins WHERE member_id=?', (member_id,))
+    cur.execute('DELETE FROM score_adjustments WHERE member_id=?', (member_id,))
+    cur.execute('DELETE FROM appeals WHERE member_id=?', (member_id,))
+    cur.execute('DELETE FROM violations WHERE member_id=?', (member_id,))
+    cur.execute('DELETE FROM members WHERE id=? AND is_admin=0', (member_id,))
     conn.commit()
     conn.close()
-    return redirect(url_for('admin_dashboard', msg='已软删除该成员（打卡记录保留）'))
+    return redirect(url_for('admin_dashboard', msg='已删除该成员及其全部打卡记录（不保留）'))
 
 
 @app.route('/admin/member/<int:member_id>/edit', methods=['POST'])
@@ -1065,6 +1130,30 @@ def admin_member_adjust(member_id):
     conn.close()
     return redirect(url_for('admin_member_detail', member_id=member_id,
                             msg=('已加' if points > 0 else '已减') + '分 ' + str(abs(points))))
+
+
+@app.route('/admin/member/<int:member_id>/record/<int:checkin_id>/delete', methods=['POST'])
+def admin_member_record_delete(member_id, checkin_id):
+    """后台删除单条打卡记录（硬删除，含照片，不保留），并重算当日逐条得分"""
+    if not session.get('is_admin'):
+        return redirect(url_for('index'))
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT member_id, check_date, photo_path FROM checkins WHERE id=?', (checkin_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return redirect(url_for('admin_member_detail', member_id=member_id, error='记录不存在'))
+    if row['member_id'] != member_id:
+        conn.close()
+        return redirect(url_for('admin_member_detail', member_id=member_id, error='记录与成员不匹配'))
+    _delete_checkin_photo(row['photo_path'])
+    cur.execute('DELETE FROM checkins WHERE id=?', (checkin_id,))
+    conn.commit()
+    conn.close()
+    # 重算该成员当日逐条得分，保持总分一致
+    recompute_and_save_points(member_id, row['check_date'])
+    return redirect(url_for('admin_member_detail', member_id=member_id, msg='已删除该条打卡记录（不保留）'))
 
 
 @app.route('/admin/company/edit', methods=['POST'])

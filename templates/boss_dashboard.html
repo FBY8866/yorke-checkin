@@ -27,6 +27,7 @@
         .zoom-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: none; align-items: center; justify-content: center; z-index: 2000; padding: 20px; }
         .zoom-overlay img { max-width: 96%; max-height: 90%; border-radius: 8px; box-shadow: 0 8px 40px rgba(0,0,0,.6); }
         .zoom-close { position: fixed; top: 18px; right: 18px; color: #fff; font-size: 16px; background: rgba(255,255,255,.15); padding: 8px 14px; border-radius: 20px; cursor: pointer; }
+        .zoom-caption { position: fixed; bottom: 18px; left: 0; right: 0; text-align: center; color: #fff; font-size: 14px; padding: 8px 16px; display: none; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
         .note { padding: 16px; color: #6B7280; font-size: 12px; line-height: 1.6; }
         .live { font-size: 12px; color: #0F766E; }
     </style>
@@ -73,7 +74,7 @@
                 <td>
                     {% if r.content %}{{ r.content }}{% endif %}
                     {% if r.address %}<div style="color:#047857;font-size:12px;margin-top:4px;">📍 {{ r.address }}</div>{% endif %}
-                    {% if r.photo_path %}<img class="photo" src="/{{ r.photo_path }}" alt="照片" onclick="openZoom('/{{ r.photo_path }}')">{% endif %}
+                    {% if r.photo_path %}<img class="photo" src="/{{ r.photo_path }}" alt="照片" onclick="openZoom('/{{ r.photo_path }}', {{ (r.address or '')|tojson }})">{% endif %}
                 </td>
                 <td style="white-space:nowrap;">{{ r.submitted_at }}</td>
             </tr>
@@ -91,8 +92,15 @@
     <script>
         // 实时掌握：每 20 秒自动刷新当前日期看板
         setTimeout(function () { location.reload(); }, 20000);
-        function openZoom(src) {
+        function openZoom(src, addr) {
             document.getElementById('zoomImg').src = src;
+            var cap = document.getElementById('zoomCaption');
+            if (addr) {
+                cap.textContent = '📍 ' + addr;
+                cap.style.display = 'block';
+            } else {
+                cap.style.display = 'none';
+            }
             document.getElementById('zoomOverlay').style.display = 'flex';
         }
         function closeZoom() {
@@ -102,6 +110,7 @@
     <!-- 照片放大查看（灯箱） -->
     <div class="zoom-overlay" id="zoomOverlay" onclick="closeZoom()">
         <img id="zoomImg" src="" alt="放大查看">
+        <div class="zoom-caption" id="zoomCaption"></div>
         <div class="zoom-close" onclick="closeZoom()">✕ 关闭</div>
     </div>
 </body>

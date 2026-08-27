@@ -184,11 +184,11 @@
             {% for c in companies %}
             <tr>
                 <td>{{ c.name }}</td>
-                <td>{% if c.boss_password %}已设置（{{ c.boss_password|length }} 位）{% else %}<span style="color:#9CA3AF;">未设置</span>{% endif %}</td>
+                <td>{% if c.boss_password %}<code style="background:#F3F4F6;padding:3px 8px;border-radius:6px;font-size:13px;color:#B91C1C;font-weight:600;">{{ c.boss_password }}</code>{% else %}<span style="color:#9CA3AF;">未设置</span>{% endif %}</td>
                 <td>
                     <form method="POST" action="/admin/company/edit" style="display:flex;gap:6px;">
                         <input type="hidden" name="company_id" value="{{ c.id }}">
-                        <input name="boss_password" placeholder="设置/修改密码" style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;width:140px;">
+                        <input name="boss_password" value="{{ c.boss_password or '' }}" placeholder="设置/修改密码" style="padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px;width:140px;">
                         <button class="row-btn" type="submit">保存</button>
                     </form>
                 </td>
@@ -240,7 +240,7 @@
     }
     function closeModal(){ document.getElementById('m').style.display = 'none'; }
     function delMember(id, name){
-        if(confirm('确认软删除【' + name + '】？\n其打卡记录会保留，但不再出现在榜单。')){
+        if(confirm('确认删除【' + name + '】？\n该成员的全部打卡记录及照片将一并删除，不可恢复（不保留）。')){
             var f = document.createElement('form');
             f.method = 'POST';
             f.action = '/admin/member/' + id + '/delete';

@@ -132,6 +132,11 @@
             position: fixed; top: 18px; right: 18px; color: #fff; font-size: 16px;
             background: rgba(255,255,255,.15); padding: 8px 14px; border-radius: 20px; cursor: pointer;
         }
+        .zoom-caption {
+            position: fixed; bottom: 18px; left: 0; right: 0; text-align: center;
+            color: #fff; font-size: 14px; padding: 8px 16px; display: none;
+            text-shadow: 0 1px 4px rgba(0,0,0,.8);
+        }
         .rec-edit-btn {
             background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE;
             padding: 3px 10px; border-radius: 12px; font-size: 12px; cursor: pointer;
@@ -257,13 +262,13 @@
             <div class="rec-head">
                 <span class="rec-type">{{ TNAME.get(rec.check_type, rec.check_type) }}</span>
                 <span class="rec-time">{{ rec.submitted_at }}</span>
-                <span class="rec-points">+{{ rec.points }} 分</span>
+                <span class="rec-points">{% if rec.points > 0 %}+{{ rec.points }} 分{% else %}不计分{% endif %}</span>
                 <button type="button" class="rec-edit-btn" onclick="openEdit({{ rec.id }}, '{{ rec.check_type }}', `{{ rec.content or '' }}`, `{{ rec.customer_name or '' }}`)">✏️ 修改</button>
             </div>
             {% if rec.content %}<div class="rec-content">{{ rec.content }}</div>{% endif %}
             {% if rec.customer_name %}<div class="rec-addr" style="color:#B45309;">👤 {{ rec.customer_name }}</div>{% endif %}
             {% if rec.address %}<div class="rec-addr">📍 {{ rec.address }}</div>{% endif %}
-            {% if rec.photo_path %}<img src="/{{ rec.photo_path }}" class="rec-photo" alt="打卡照片" style="cursor:pointer" onclick="openZoom('/{{ rec.photo_path }}')">{% endif %}
+            {% if rec.photo_path %}<img src="/{{ rec.photo_path }}" class="rec-photo" alt="打卡照片" style="cursor:pointer" onclick="openZoom('/{{ rec.photo_path }}', {{ (rec.address or '')|tojson }})">{% endif %}
         </div>
         {% endfor %}
         {% endif %}
@@ -544,11 +549,19 @@
     <!-- 照片放大查看（灯箱） -->
     <div class="zoom-overlay" id="zoomOverlay" onclick="closeZoom()">
         <img id="zoomImg" src="" alt="放大查看">
+        <div class="zoom-caption" id="zoomCaption"></div>
         <div class="zoom-close" onclick="closeZoom()">✕ 关闭</div>
     </div>
     <script>
-        function openZoom(src) {
+        function openZoom(src, addr) {
             document.getElementById('zoomImg').src = src;
+            var cap = document.getElementById('zoomCaption');
+            if (addr) {
+                cap.textContent = '📍 ' + addr;
+                cap.style.display = 'block';
+            } else {
+                cap.style.display = 'none';
+            }
             document.getElementById('zoomOverlay').style.display = 'flex';
         }
         function closeZoom() {
